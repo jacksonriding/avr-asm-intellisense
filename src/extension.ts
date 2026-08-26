@@ -1,11 +1,21 @@
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, isAbsolute, join, resolve as resolvePath } from "node:path";
 
 import * as vscode from "vscode";
 
 import { buildCompletionCandidates } from "./core/completions";
+import {
+  findCompilationCommand,
+  parseCompilationDatabase,
+  type CompileCommandContext
+} from "./core/compileCommands";
+import {
+  formatActiveContext,
+  resolveCompilationContext,
+  type CompilationContext
+} from "./core/compilationContext";
 import { parsePlatformioConfig, selectPlatformioMcu } from "./core/platformio";
 import {
   runPlatformioMetadata,
@@ -13,7 +23,6 @@ import {
   type PlatformioCompilationContext
 } from "./core/platformioMetadata";
 import { runAvrPreprocessor } from "./core/preprocessor";
-import { resolveAvrToolchain, type ResolvedAvrToolchain } from "./core/toolchainContext";
 import type { AvrMacro, CompletionKind } from "./core/types";
 
 interface SymbolCache {
@@ -73,6 +82,23 @@ function completionItems(macros: readonly AvrMacro[]): vscode.CompletionItem[] {
   });
 }
 
+function compilationDatabaseUris(
+  workspaceFolder: vscode.WorkspaceFolder,
+  configuredPath: string
+): readonly vscode.Uri[] {
+  const selectedPath = configuredPath.trim();
+  if (selectedPath.length > 0) {
+    const filePath = isAbsolute(selectedPath)
+      ? selectedPath
+      : resolvePath(workspaceFolder.uri.fsPath, selectedPath);
+    return Object.freeze([vscode.Uri.file(filePath)]);
+  }
+  return Object.freeze([
+    vscode.Uri.joinPath(workspaceFolder.uri, "compile_commands.json"),
+    vscode.Uri.joinPath(workspaceFolder.uri, "build", "compile_commands.json")
+  ]);
+}
+
 function boundedCacheSet(
   cache: Map<string, MetadataCacheEntry>,
   key: string,
@@ -105,17 +131,48 @@ export function activate(context: vscode.ExtensionContext): void {
   platformioWatcher.onDidChange(clearCaches);
   platformioWatcher.onDidCreate(clearCaches);
   platformioWatcher.onDidDelete(clearCaches);
+  const compilationDatabaseWatcher = vscode.workspace.createFileSystemWatcher(
+    "**/compile_commands.json"
+  );
+  compilationDatabaseWatcher.onDidChange(clearCaches);
+  compilationDatabaseWatcher.onDidCreate(clearCaches);
+  compilationDatabaseWatcher.onDidDelete(clearCaches);
 
-  const resolveToolchain = async (
+  const resolveContext = async (
     document: vscode.TextDocument
-  ): Promise<ResolvedAvrToolchain | undefined> => {
+  ): Promise<CompilationContext | undefined> => {
     const configuration = vscode.workspace.getConfiguration("avrAsmIntellisense", document.uri);
     const configuredMcu = configuration.get<string>("mcu", "");
     const configuredCompilerPath = configuration.get<string>("compilerPath", "");
     const requestedEnvironment = configuration.get<string>("platformioEnvironment", "").trim();
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
     if (workspaceFolder === undefined || workspaceFolder.uri.scheme !== "file") {
-      return resolveAvrToolchain({ configuredCompilerPath, configuredMcu });
+      return resolveCompilationContext({ configuredCompilerPath, configuredMcu });
+    }
+
+    let compileCommand: CompileCommandContext | undefined;
+    const databaseUris = compilationDatabaseUris(
+      workspaceFolder,
+      configuration.get<string>("compileCommandsPath", "")
+    );
+    for (const databaseUri of databaseUris) {
+      try {
+        const bytes = await vscode.workspace.fs.readFile(databaseUri);
+        const contexts = parseCompilationDatabase(Buffer.from(bytes).toString("utf8"));
+        compileCommand = findCompilationCommand(contexts, document.uri.fsPath);
+        if (compileCommand !== undefined) {
+          break;
+        }
+      } catch {
+        // Missing or unusable databases are optional; continue to project adapters.
+      }
+    }
+    if (compileCommand !== undefined) {
+      return resolveCompilationContext({
+        configuredCompilerPath,
+        configuredMcu,
+        compileCommand
+      });
     }
 
     let iniContent = "";
@@ -125,7 +182,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       iniContent = Buffer.from(bytes).toString("utf8");
     } catch {
-      return resolveAvrToolchain({ configuredCompilerPath, configuredMcu });
+      return resolveCompilationContext({ configuredCompilerPath, configuredMcu });
     }
 
     const iniConfig = parsePlatformioConfig(iniContent);
@@ -170,13 +227,37 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }
 
-    return resolveAvrToolchain({
+    return resolveCompilationContext({
       configuredCompilerPath,
       configuredMcu,
-      ...(metadata === undefined ? {} : { metadata }),
+      ...(metadata === undefined ? {} : { platformio: metadata }),
       ...(iniMcu === undefined ? {} : { iniMcu })
     });
   };
+
+  const showActiveContext = vscode.commands.registerCommand(
+    "avrAsmIntellisense.showActiveContext",
+    async (): Promise<void> => {
+      const document = vscode.window.activeTextEditor?.document;
+      if (document === undefined || document.languageId !== "avr-asm") {
+        await vscode.window.showInformationMessage("Open an AVR assembly file to inspect its context.");
+        return;
+      }
+      if (!vscode.workspace.isTrusted) {
+        output.appendLine(
+          "Workspace trust is required for AVR project discovery. Static completions remain available."
+        );
+        output.show(true);
+        return;
+      }
+      try {
+        output.appendLine(formatActiveContext(await resolveContext(document)));
+      } catch {
+        output.appendLine("Unable to resolve the active AVR context. Static completions remain available.");
+      }
+      output.show(true);
+    }
+  );
 
   const provider = vscode.languages.registerCompletionItemProvider("avr-asm", {
     async provideCompletionItems(document, _position, cancellationToken): Promise<vscode.CompletionItem[]> {
@@ -185,7 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!trusted || cancellationToken.isCancellationRequested) {
         return completionItems(macros);
       }
-      const toolchain = await resolveToolchain(document);
+      const toolchain = await resolveContext(document);
 
       if (toolchain !== undefined && !cancellationToken.isCancellationRequested) {
         const toolchainKey = JSON.stringify(toolchain);
@@ -209,7 +290,14 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-  context.subscriptions.push(output, provider, configurationWatcher, platformioWatcher);
+  context.subscriptions.push(
+    output,
+    provider,
+    showActiveContext,
+    configurationWatcher,
+    platformioWatcher,
+    compilationDatabaseWatcher
+  );
 }
 
 export function deactivate(): void {

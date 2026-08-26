@@ -34,7 +34,8 @@
     }
   },
   "activationEvents": [
-    "onLanguage:avr-asm"
+    "onLanguage:avr-asm",
+    "onCommand:avrAsmIntellisense.showActiveContext"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -60,6 +61,12 @@
         "path": "./syntaxes/avr-asm.tmLanguage.json"
       }
     ],
+    "commands": [
+      {
+        "command": "avrAsmIntellisense.showActiveContext",
+        "title": "AVR Assembly: Show Active Context"
+      }
+    ],
     "configuration": {
       "title": "AVR Assembly IntelliSense",
       "properties": {
@@ -72,6 +79,11 @@
           "type": "string",
           "default": "",
           "description": "AVR MCU name passed to avr-gcc, for example atmega328p."
+        },
+        "avrAsmIntellisense.compileCommandsPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to compile_commands.json. When blank, search the workspace root and build directory."
         },
         "avrAsmIntellisense.platformioEnvironment": {
           "type": "string",

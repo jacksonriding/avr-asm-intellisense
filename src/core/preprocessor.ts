@@ -10,8 +10,8 @@ const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 export interface PreprocessorRequest {
   readonly compilerPath: string;
   readonly mcu?: string;
-  readonly compilerFlags?: readonly string[];
   readonly defines?: readonly string[];
+  readonly undefines?: readonly string[];
   readonly includePaths?: readonly string[];
   readonly source: string;
   readonly timeoutMs?: number;
@@ -54,27 +54,25 @@ function validateIncludePath(includePath: string): string {
   return includePath;
 }
 
-function validateCompilerFlag(flag: string): string {
-  if (flag.length === 0 || flag.length > 4_096 || /[\0\r\n]/u.test(flag)) {
-    throw new Error("Invalid AVR compiler flag.");
+function validateUndefine(undefine: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(undefine)) {
+    throw new Error("Invalid AVR preprocessor undefinition.");
   }
-  return flag;
-}
-
-function hasMcuFlag(flags: readonly string[]): boolean {
-  return flags.some((flag) => flag === "-mmcu" || flag.startsWith("-mmcu="));
+  return undefine;
 }
 
 export function buildPreprocessorArgs(
-  context: Pick<PreprocessorContext, "mcu" | "compilerFlags" | "defines" | "includePaths">
+  context: Pick<PreprocessorContext, "mcu" | "defines" | "undefines" | "includePaths">
 ): readonly string[] {
-  const compilerFlags = [...new Set(context.compilerFlags ?? [])].map(validateCompilerFlag);
-  const args: string[] = [...compilerFlags];
-  if (!hasMcuFlag(args) && context.mcu !== undefined) {
+  const args: string[] = [];
+  if (context.mcu !== undefined) {
     args.push(`-mmcu=${validateMcu(context.mcu)}`);
   }
   for (const define of new Set(context.defines ?? [])) {
     args.push(`-D${validateDefine(define)}`);
+  }
+  for (const undefine of new Set(context.undefines ?? [])) {
+    args.push(`-U${validateUndefine(undefine)}`);
   }
   for (const includePath of new Set(context.includePaths ?? [])) {
     args.push("-I", validateIncludePath(includePath));
