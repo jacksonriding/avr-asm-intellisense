@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "AVR Assembly",
+  "scopeName": "source.avr-asm",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#preprocessor" },
+    { "include": "#labels" },
+    { "include": "#directives" },
+    { "include": "#registers" },
+    { "include": "#instructions" },
+    { "include": "#numbers" },
+    { "include": "#strings" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.semicolon.avr-asm", "match": ";.*$" },
+        { "name": "comment.line.double-slash.avr-asm", "match": "//.*$" }
+      ]
+    },
+    "preprocessor": {
+      "patterns": [
+        { "name": "meta.preprocessor.avr-asm", "match": "^\\s*#\\s*(include|define|if|ifdef|ifndef|else|elif|endif|error|warning)\\b.*$" }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        { "name": "entity.name.function.label.avr-asm", "match": "^\\s*([A-Za-z_.$][A-Za-z0-9_.$]*):" }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        { "name": "keyword.control.directive.avr-asm", "match": "(?i)\\.(section|text|data|bss|global|extern|equ|set|byte|word|ascii|asciz|macro|endm)\\b" }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        { "name": "variable.language.register.avr-asm", "match": "(?i)\\b(r(?:[0-9]|[12][0-9]|3[01])|x|y|z)\\b" }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        { "name": "keyword.mnemonic.avr-asm", "match": "(?i)\\b(adc|add|and|andi|breq|brne|call|cbi|clr|cp|cpc|cpi|dec|eor|icall|ijmp|in|inc|jmp|ld|ldi|lds|lpm|mov|movw|nop|or|ori|out|pop|push|rcall|ret|reti|rjmp|sbi|sbic|sbis|sbiw|sei|sleep|st|sts|sub|subi|swap|tst|wdr)\\b" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.avr-asm", "match": "\\b(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|[0-9]+)\\b" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.double.avr-asm", "begin": "\"", "end": "\"" }
+      ]
+    }
+  }
+}

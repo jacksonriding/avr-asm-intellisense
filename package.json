@@ -1,0 +1,85 @@
+{
+  "name": "avr-asm-intellisense",
+  "displayName": "AVR Assembly IntelliSense",
+  "description": "AVR-aware completion and highlighting for GNU assembly in VS Code and PlatformIO projects.",
+  "version": "0.0.1",
+  "publisher": "local-development",
+  "license": "MIT",
+  "files": [
+    "dist/**",
+    "syntaxes/**",
+    "language-configuration.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Static syntax highlighting and built-in completions work in untrusted workspaces. avr-gcc preprocessing for <avr/io.h> symbols only runs after the workspace is trusted."
+    }
+  },
+  "activationEvents": [
+    "onLanguage:avr-asm"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "avr-asm",
+        "aliases": [
+          "AVR Assembly",
+          "avr-asm"
+        ],
+        "extensions": [
+          ".S",
+          ".s"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "avr-asm",
+        "scopeName": "source.avr-asm",
+        "path": "./syntaxes/avr-asm.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "AVR Assembly IntelliSense",
+      "properties": {
+        "avrAsmIntellisense.compilerPath": {
+          "type": "string",
+          "default": "avr-gcc",
+          "description": "Path to avr-gcc. Use the compiler from the active PlatformIO toolchain when necessary."
+        },
+        "avrAsmIntellisense.mcu": {
+          "type": "string",
+          "default": "",
+          "description": "AVR MCU name passed to avr-gcc, for example atmega328p."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "package": "npm run compile && npm run check && npm run test:coverage && vsce package --allow-missing-repository --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.90.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
