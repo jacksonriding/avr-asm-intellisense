@@ -50,6 +50,12 @@ describe("buildInstructionHover", () => {
     expect(buildInstructionHover("lpm", 1)?.markdown).toContain("`LPM Rd, Z+`");
     expect(buildInstructionHover("ret", 1)?.markdown).not.toContain("**Operands**");
   });
+
+  it("describes dynamic SREG effects and exact alias equivalents", () => {
+    expect(buildInstructionHover("bclr 0", 1)?.markdown)
+      .toContain("Selected SREG bit (s) is cleared");
+    expect(buildInstructionHover("clr r16", 1)?.markdown).toContain("`EOR Rd, Rd`");
+  });
 });
 
 describe("getInstructionSignatureHelp", () => {
@@ -79,6 +85,12 @@ describe("getInstructionSignatureHelp", () => {
       .toBe(true);
   });
 
+  it("selects partial and displaced pointer forms and clamps extra operands", () => {
+    expect(getInstructionSignatureHelp("lpm r16", 7)?.activeSignature).toBe(1);
+    expect(getInstructionSignatureHelp("ldd r16, Z+4", 12)?.activeSignature).toBe(1);
+    expect(getInstructionSignatureHelp("ldi r16, 0, extra", 17)?.activeParameter).toBe(1);
+  });
+
   it.each([
     ["unknown r16, 0", 15],
     ["; ldi r16, 0", 12],
@@ -89,6 +101,7 @@ describe("getInstructionSignatureHelp", () => {
   });
 
   it("supports mixed-case instructions after labels", () => {
-    expect(getInstructionSignatureHelp("label: LdI r16, 0", 18)?.activeParameter).toBe(1);
+    expect(getInstructionSignatureHelp("label: LdI r16, 0", 17)?.activeParameter).toBe(1);
+    expect(buildInstructionHover("1: ldi r16, 0", 4)?.markdown).toContain("### `LDI`");
   });
 });

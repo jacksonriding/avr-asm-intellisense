@@ -1,12 +1,5 @@
 import type { AvrMacro, CompletionCandidate } from "./types";
-
-const INSTRUCTIONS = [
-  "ADC", "ADD", "AND", "ANDI", "BREQ", "BRNE", "CALL", "CBI", "CLR", "CP",
-  "CPC", "CPI", "DEC", "EOR", "ICALL", "IJMP", "IN", "INC", "JMP", "LD",
-  "LDI", "LDS", "LPM", "MOV", "MOVW", "NOP", "OR", "ORI", "OUT", "POP",
-  "PUSH", "RCALL", "RET", "RETI", "RJMP", "SBI", "SBIC", "SBIS", "SBIW",
-  "SEI", "SLEEP", "ST", "STS", "SUB", "SUBI", "SWAP", "TST", "WDR"
-] as const;
+import { AVR_INSTRUCTIONS, type AvrInstruction } from "./instructions";
 
 const REGISTERS = Array.from({ length: 32 }, (_, index) => `r${index}`);
 const POINTER_REGISTERS = ["X", "Y", "Z"] as const;
@@ -18,16 +11,28 @@ function frozenCandidate(candidate: CompletionCandidate): CompletionCandidate {
   return Object.freeze(candidate);
 }
 
+function instructionDocumentation(instruction: AvrInstruction): string {
+  const operandLines = instruction.forms.flatMap(({ operands }) => operands).filter(
+    (operand, index, operands) => operands.findIndex(({ label }) => label === operand.label) === index
+  ).map(({ label, description }) => `**${label}:** ${description}`);
+  return [
+    instruction.summary,
+    ...operandLines,
+    `Availability: ${instruction.availability}`
+  ].join("\n\n");
+}
+
 export function buildCompletionCandidates(
   macros: readonly AvrMacro[]
 ): readonly CompletionCandidate[] {
   const candidates = new Map<string, CompletionCandidate>();
 
-  for (const instruction of INSTRUCTIONS) {
-    candidates.set(instruction, frozenCandidate({
-      label: instruction,
-      detail: "AVR instruction",
-      kind: "instruction"
+  for (const instruction of AVR_INSTRUCTIONS) {
+    candidates.set(instruction.mnemonic, frozenCandidate({
+      label: instruction.mnemonic,
+      detail: `${instruction.forms[0]?.syntax ?? instruction.mnemonic} — ${instruction.summary}`,
+      kind: "instruction",
+      documentation: instructionDocumentation(instruction)
     }));
   }
   for (const register of [...REGISTERS, ...POINTER_REGISTERS]) {

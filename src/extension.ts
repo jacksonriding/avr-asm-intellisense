@@ -24,6 +24,7 @@ import {
 } from "./core/platformioMetadata";
 import { runAvrPreprocessor } from "./core/preprocessor";
 import type { AvrMacro, CompletionKind } from "./core/types";
+import { registerInstructionProviders } from "./vscode/instructionProviders";
 
 interface SymbolCache {
   readonly key: string;
@@ -80,6 +81,12 @@ function completionItems(macros: readonly AvrMacro[]): vscode.CompletionItem[] {
   return buildCompletionCandidates(macros).map((candidate) => {
     const item = new vscode.CompletionItem(candidate.label, completionKinds[candidate.kind]);
     item.detail = candidate.detail;
+    if (candidate.documentation !== undefined) {
+      const documentation = new vscode.MarkdownString(candidate.documentation);
+      documentation.isTrusted = false;
+      documentation.supportHtml = false;
+      item.documentation = documentation;
+    }
     return item;
   });
 }
@@ -325,6 +332,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return completionItems(macros);
     }
   });
+  const instructionProviders = registerInstructionProviders();
 
   context.subscriptions.push(
     output,
@@ -332,7 +340,8 @@ export function activate(context: vscode.ExtensionContext): void {
     showActiveContext,
     configurationWatcher,
     platformioWatcher,
-    compilationDatabaseWatcher
+    compilationDatabaseWatcher,
+    ...instructionProviders
   );
 }
 

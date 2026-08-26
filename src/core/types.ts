@@ -9,4 +9,5 @@ export interface CompletionCandidate {
   readonly label: string;
   readonly detail: string;
   readonly kind: CompletionKind;
+  readonly documentation?: string;
 }

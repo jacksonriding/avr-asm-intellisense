@@ -59,12 +59,13 @@ describe("AVR_INSTRUCTIONS", () => {
     expect(Object.isFrozen(ldi?.forms)).toBe(true);
     expect(Object.isFrozen(ldi?.forms[0])).toBe(true);
     expect(Object.isFrozen(ldi?.forms[0]?.operands)).toBe(true);
-      expect(Object.isFrozen(ldi?.forms[0]?.operands[0])).toBe(true);
+    expect(Object.isFrozen(ldi?.forms[0]?.operands[0])).toBe(true);
     expect(Object.isFrozen(ldi?.statusFlags)).toBe(true);
     expect(AVR_INSTRUCTIONS.every(Object.isFrozen)).toBe(true);
     expect(AVR_INSTRUCTIONS.flatMap(({ forms }) => forms).every(Object.isFrozen)).toBe(true);
     expect(AVR_INSTRUCTIONS.flatMap(({ forms }) => forms)
       .flatMap(({ operands }) => operands).every(Object.isFrozen)).toBe(true);
+    expect(Object.isFrozen(ldi?.forms[0]?.operands[0]?.registerRange)).toBe(true);
   });
 
   it("models representative aliases, overloads, flags, timing, and availability", () => {
@@ -79,5 +80,20 @@ describe("AVR_INSTRUCTIONS", () => {
     expect(findInstruction("ADC")?.statusFlags).toEqual(["Z", "C", "N", "V", "S", "H"]);
     expect(findInstruction("XCH")?.availability).toContain("AVRxm");
     expect(findInstruction("LDI")?.forms[0]?.cycles).toBe("1");
+    expect(findInstruction("BST")?.forms[0]?.syntax).toBe("BST Rr, b");
+    expect(findInstruction("CALL")?.forms[0]?.cycles).toContain("AVRe 4/5");
+    expect(findInstruction("RET")?.forms[0]?.cycles).toContain("AVRrc 6");
+    expect(findInstruction("CLR")?.equivalentTo).toBe("EOR Rd, Rd");
+  });
+
+  it("models important register and numeric operand constraints", () => {
+    const operand = (mnemonic: string, label: string) => findInstruction(mnemonic)?.forms
+      .flatMap(({ operands }) => operands).find((candidate) => candidate.label === label);
+
+    expect(operand("ANDI", "Rd")?.registerRange).toEqual({ first: 16, last: 31, step: 1 });
+    expect(operand("FMUL", "Rd")?.registerRange).toEqual({ first: 16, last: 23, step: 1 });
+    expect(operand("MOVW", "Rd")?.registerRange).toEqual({ first: 0, last: 30, step: 2 });
+    expect(operand("CBI", "A")?.numericRange).toEqual({ min: 0, max: 31 });
+    expect(operand("RJMP", "k")?.numericRange).toEqual({ min: -2048, max: 2047 });
   });
 });

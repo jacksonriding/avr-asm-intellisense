@@ -41,7 +41,7 @@
     },
     "instructions": {
       "patterns": [
-        { "name": "keyword.mnemonic.avr-asm", "match": "(?i)\\b(adc|add|and|andi|breq|brne|call|cbi|clr|cp|cpc|cpi|dec|eor|icall|ijmp|in|inc|jmp|ld|ldi|lds|lpm|mov|movw|nop|or|ori|out|pop|push|rcall|ret|reti|rjmp|sbi|sbic|sbis|sbiw|sei|sleep|st|sts|sub|subi|swap|tst|wdr)\\b" }
+        { "name": "keyword.mnemonic.avr-asm", "match": "(?i)\\b(adc|add|adiw|and|andi|asr|bclr|bld|brbc|brbs|brcc|brcs|break|breq|brge|brhc|brhs|brid|brie|brlo|brlt|brmi|brne|brpl|brsh|brtc|brts|brvc|brvs|bset|bst|call|cbi|cbr|clc|clh|cli|cln|clr|cls|clt|clv|clz|com|cp|cpc|cpi|cpse|dec|des|eicall|eijmp|elpm|eor|fmul|fmuls|fmulsu|icall|ijmp|in|inc|jmp|lac|las|lat|ld|ldd|ldi|lds|lpm|lsl|lsr|mov|movw|mul|muls|mulsu|neg|nop|or|ori|out|pop|push|rcall|ret|reti|rjmp|rol|ror|sbc|sbci|sbi|sbic|sbis|sbiw|sbr|sbrc|sbrs|sec|seh|sei|sen|ser|ses|set|sev|sez|sleep|spm|st|std|sts|sub|subi|swap|tst|wdr|xch)\\b" }
       ]
     },
     "numbers": {
