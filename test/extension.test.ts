@@ -54,6 +54,11 @@ vi.mock("vscode", () => {
       }
     },
     Uri: {
+      file: (filePath: string) => ({
+        scheme: "file",
+        fsPath: filePath,
+        toString: () => `file://${filePath}`
+      }),
       joinPath: (_base: unknown, name: string) => ({
         scheme: "file",
         fsPath: `/workspace/${name}`,
@@ -153,6 +158,41 @@ describe("extension integration", () => {
     expect(mocks.outputAppendLine).toHaveBeenCalledWith(expect.stringContaining("MCU: atmega328p"));
     expect(mocks.outputShow).toHaveBeenCalled();
     expect(mocks.runMetadata).not.toHaveBeenCalled();
+  });
+
+  it("caches a parsed compilation database across completion requests", async () => {
+    mocks.trusted = true;
+    mocks.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith("compile_commands.json")) {
+        return Buffer.from(JSON.stringify([{
+          directory: "/workspace",
+          file: "src/main.S",
+          arguments: ["avr-gcc", "-mmcu=atmega328p", "-c", "src/main.S"]
+        }]));
+      }
+      throw new Error("not found");
+    });
+    mocks.runPreprocessor.mockResolvedValue([]);
+
+    await mocks.registeredProvider?.provideCompletionItems(document, position, activeToken);
+    await mocks.registeredProvider?.provideCompletionItems(document, position, activeToken);
+
+    expect(mocks.readFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an invalid explicitly configured compilation database", async () => {
+    mocks.trusted = true;
+    mocks.settings = {
+      compileCommandsPath: "/workspace/custom/compile_commands.json",
+      usePlatformioMetadata: false
+    };
+    mocks.readFile.mockResolvedValue(Buffer.from("not json"));
+
+    await mocks.registeredProvider?.provideCompletionItems(document, position, activeToken);
+
+    expect(mocks.outputAppendLine).toHaveBeenCalledWith(
+      "Configured compilation database is unavailable or invalid."
+    );
   });
 
   it("returns static completions without reading or executing in an untrusted workspace", async () => {

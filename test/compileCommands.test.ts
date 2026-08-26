@@ -53,6 +53,26 @@ describe("parseCompilationDatabase", () => {
     });
   });
 
+  it("preserves Windows compiler paths and matches them case-insensitively", () => {
+    const contexts = parseCompilationDatabase(JSON.stringify([{
+      directory: "C:\\Project",
+      file: "src\\Main.S",
+      command: "\"C:\\Toolchain Files\\bin\\avr-gcc.exe\" -mmcu=atmega4809 -iquote \"local headers\" -c src\\Main.S"
+    }]));
+
+    expect(contexts[0]).toMatchObject({
+      sourceFile: "C:\\Project\\src\\Main.S",
+      compilerPath: "C:\\Toolchain Files\\bin\\avr-gcc.exe",
+      mcu: "atmega4809",
+      includePaths: ["C:\\Project\\local headers"]
+    });
+    expect(findCompilationCommand(
+      contexts,
+      "c:\\project\\SRC\\main.s",
+      "win32"
+    )).toBe(contexts[0]);
+  });
+
   it("selects only the exact document entry", () => {
     const contexts = parseCompilationDatabase(JSON.stringify([
       {
