@@ -4,6 +4,12 @@ const mocks = vi.hoisted(() => ({
   registeredProvider: undefined as undefined | {
     provideCompletionItems: (...args: unknown[]) => Promise<Array<{ label: string }>>;
   },
+  registeredHoverProvider: undefined as undefined | {
+    provideHover: (...args: unknown[]) => unknown;
+  },
+  registeredSignatureProvider: undefined as undefined | {
+    provideSignatureHelp: (...args: unknown[]) => unknown;
+  },
   registeredCommands: new Map<string, (...args: unknown[]) => unknown>(),
   settings: {} as Record<string, unknown>,
   trusted: false,
@@ -30,11 +36,50 @@ vi.mock("vscode", () => {
     readonly label: string;
     readonly kind: number;
     detail?: string;
+    documentation?: unknown;
 
     constructor(label: string, kind: number) {
       this.label = label;
       this.kind = kind;
     }
+  }
+
+  class MarkdownString {
+    readonly value: string;
+    isTrusted = false;
+
+    constructor(value: string) {
+      this.value = value;
+    }
+  }
+
+  class Range {
+    constructor(
+      readonly startLine: number,
+      readonly startCharacter: number,
+      readonly endLine: number,
+      readonly endCharacter: number
+    ) {}
+  }
+
+  class Hover {
+    constructor(readonly contents: MarkdownString, readonly range: Range) {}
+  }
+
+  class ParameterInformation {
+    constructor(readonly label: string, readonly documentation?: string) {}
+  }
+
+  class SignatureInformation {
+    parameters: ParameterInformation[] = [];
+
+    constructor(readonly label: string, readonly documentation?: string) {}
+  }
+
+  class SignatureHelp {
+    signatures: SignatureInformation[] = [];
+    activeSignature = 0;
+    activeParameter = 0;
   }
 
   const disposable = () => ({ dispose: vi.fn() });
@@ -47,6 +92,12 @@ vi.mock("vscode", () => {
   return {
     CompletionItem,
     CompletionItemKind: { Keyword: 1, Variable: 2, Constant: 3 },
+    Hover,
+    MarkdownString,
+    ParameterInformation,
+    Range,
+    SignatureHelp,
+    SignatureInformation,
     commands: {
       registerCommand: (name: string, callback: (...args: unknown[]) => unknown) => {
         mocks.registeredCommands.set(name, callback);
@@ -68,6 +119,17 @@ vi.mock("vscode", () => {
     languages: {
       registerCompletionItemProvider: (_language: string, provider: typeof mocks.registeredProvider) => {
         mocks.registeredProvider = provider;
+        return disposable();
+      },
+      registerHoverProvider: (_language: string, provider: typeof mocks.registeredHoverProvider) => {
+        mocks.registeredHoverProvider = provider;
+        return disposable();
+      },
+      registerSignatureHelpProvider: (
+        _language: string,
+        provider: typeof mocks.registeredSignatureProvider
+      ) => {
+        mocks.registeredSignatureProvider = provider;
         return disposable();
       }
     },
@@ -131,10 +193,38 @@ describe("extension integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.registeredProvider = undefined;
+    mocks.registeredHoverProvider = undefined;
+    mocks.registeredSignatureProvider = undefined;
     mocks.registeredCommands.clear();
     mocks.settings = {};
     mocks.trusted = false;
     activate({ subscriptions: [] } as never);
+  });
+
+  it("provides instruction hover and signature help without executing project tools", () => {
+    const instructionDocument = {
+      lineAt: () => ({ text: "ldi r16, 0" })
+    };
+    const hover = mocks.registeredHoverProvider?.provideHover(
+      instructionDocument,
+      { line: 0, character: 1 }
+    ) as { contents: { value: string; isTrusted: boolean } } | undefined;
+    const signature = mocks.registeredSignatureProvider?.provideSignatureHelp(
+      instructionDocument,
+      { line: 0, character: 9 }
+    ) as {
+      activeParameter: number;
+      signatures: Array<{ label: string; parameters: Array<{ label: string }> }>;
+    } | undefined;
+
+    expect(hover?.contents.value).toContain("### `LDI`");
+    expect(hover?.contents.isTrusted).toBe(false);
+    expect(signature?.activeParameter).toBe(1);
+    expect(signature?.signatures[0]?.label).toBe("LDI Rd, K");
+    expect(signature?.signatures[0]?.parameters.map(({ label }) => label)).toEqual(["Rd", "K"]);
+    expect(mocks.readFile).not.toHaveBeenCalled();
+    expect(mocks.runMetadata).not.toHaveBeenCalled();
+    expect(mocks.runPreprocessor).not.toHaveBeenCalled();
   });
 
   it("registers a command that reports the active per-file compilation context", async () => {
