@@ -1,4 +1,4 @@
-import { basename, isAbsolute, normalize, resolve } from "node:path";
+import { posix, win32 } from "node:path";
 
 const MAX_DATABASE_BYTES = 8 * 1024 * 1024;
 const MAX_DATABASE_ENTRIES = 10_000;
@@ -40,7 +40,8 @@ function tokenizeCommand(command: string): readonly string[] | undefined {
   let escaping = false;
   let hasToken = false;
 
-  for (const character of command) {
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index] ?? "";
     if (escaping) {
       token += character;
       escaping = false;
@@ -48,7 +49,13 @@ function tokenizeCommand(command: string): readonly string[] | undefined {
       continue;
     }
     if (character === "\\" && quote !== "'") {
-      escaping = true;
+      const nextCharacter = command[index + 1];
+      if (nextCharacter !== undefined && /[\s'"\\]/u.test(nextCharacter)) {
+        escaping = true;
+        hasToken = true;
+        continue;
+      }
+      token += character;
       hasToken = true;
       continue;
     }
@@ -99,18 +106,28 @@ function commandArguments(entry: Record<string, unknown>): readonly string[] | u
   return isValidText(entry.command) ? tokenizeCommand(entry.command) : undefined;
 }
 
-function resolveCommandPath(value: string, directory: string): string {
-  if (isAbsolute(value)) {
-    return normalize(value);
+function usesWindowsPaths(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith("\\\\");
+}
+
+function resolveEntryPath(value: string, directory: string): string {
+  const pathApi = usesWindowsPaths(value) || usesWindowsPaths(directory) ? win32 : posix;
+  if (pathApi.isAbsolute(value)) {
+    return pathApi.normalize(value);
   }
-  return /[/\\]/u.test(value) ? resolve(directory, value) : value;
+  return pathApi.resolve(directory, value);
+}
+
+function resolveCommandPath(value: string, directory: string): string {
+  return /[/\\]/u.test(value) ? resolveEntryPath(value, directory) : value;
 }
 
 function compilerIndex(args: readonly string[]): number | undefined {
   const wrappers = new Set(["ccache", "ccache.exe", "sccache", "sccache.exe"]);
-  const firstName = basename(args[0] ?? "").toLowerCase();
+  const executableName = (value: string): string => value.replaceAll("\\", "/").split("/").at(-1) ?? "";
+  const firstName = executableName(args[0] ?? "").toLowerCase();
   const index = wrappers.has(firstName) ? 1 : 0;
-  const compilerName = basename(args[index] ?? "").toLowerCase();
+  const compilerName = executableName(args[index] ?? "").toLowerCase();
   return /^avr-g(?:cc|\+\+)(?:\.exe)?$/u.test(compilerName) ? index : undefined;
 }
 
@@ -167,7 +184,9 @@ function parseEntry(value: unknown): CompileCommandContext | undefined {
       continue;
     }
 
-    const pairedValue = (prefix: "-D" | "-U" | "-I" | "-isystem"): string | undefined => {
+    const pairedValue = (
+      prefix: "-D" | "-U" | "-I" | "-isystem" | "-iquote"
+    ): string | undefined => {
       if (argument === prefix) {
         index += 1;
         return valueAfter(args, index - 1);
@@ -191,13 +210,18 @@ function parseEntry(value: unknown): CompileCommandContext | undefined {
     const includePath = pairedValue("-I");
     if (includePath !== undefined) {
       if (isValidText(includePath)) {
-        addUnique(includePaths, resolve(value.directory, includePath));
+        addUnique(includePaths, resolveEntryPath(includePath, value.directory));
       }
       continue;
     }
     const systemIncludePath = pairedValue("-isystem");
     if (systemIncludePath !== undefined && isValidText(systemIncludePath)) {
-      addUnique(includePaths, resolve(value.directory, systemIncludePath));
+      addUnique(includePaths, resolveEntryPath(systemIncludePath, value.directory));
+      continue;
+    }
+    const quoteIncludePath = pairedValue("-iquote");
+    if (quoteIncludePath !== undefined && isValidText(quoteIncludePath)) {
+      addUnique(includePaths, resolveEntryPath(quoteIncludePath, value.directory));
     }
   }
 
@@ -205,9 +229,9 @@ function parseEntry(value: unknown): CompileCommandContext | undefined {
     return undefined;
   }
   return Object.freeze({
-    sourceFile: resolve(value.directory, value.file),
+    sourceFile: resolveEntryPath(value.file, value.directory),
     compilerPath: resolveCommandPath(args[selectedCompilerIndex] ?? "", value.directory),
-    workingDirectory: normalize(value.directory),
+    workingDirectory: resolveEntryPath(value.directory, value.directory),
     mcu,
     defines: Object.freeze(defines),
     undefines: Object.freeze(undefines),
@@ -239,8 +263,14 @@ export function parseCompilationDatabase(content: string): readonly CompileComma
 
 export function findCompilationCommand(
   contexts: readonly CompileCommandContext[],
-  sourceFile: string
+  sourceFile: string,
+  platform: NodeJS.Platform = process.platform
 ): CompileCommandContext | undefined {
-  const requestedFile = normalize(sourceFile);
-  return contexts.find((context) => normalize(context.sourceFile) === requestedFile);
+  const normalizeForComparison = (value: string): string => platform === "win32"
+    ? win32.normalize(value).toLocaleLowerCase("en-US")
+    : posix.normalize(value);
+  const requestedFile = normalizeForComparison(sourceFile);
+  return contexts.find(
+    (context) => normalizeForComparison(context.sourceFile) === requestedFile
+  );
 }

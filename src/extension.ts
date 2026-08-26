@@ -35,6 +35,8 @@ interface MetadataCacheEntry {
   readonly result: Promise<readonly PlatformioCompilationContext[]>;
 }
 
+type CompilationDatabaseCache = Map<string, Promise<readonly CompileCommandContext[]>>;
+
 const METADATA_TTL_MS = 5 * 60 * 1_000;
 const MAX_METADATA_CACHE_ENTRIES = 16;
 
@@ -114,12 +116,16 @@ export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("AVR Assembly IntelliSense");
   let cache: SymbolCache | undefined;
   const metadataCache = new Map<string, MetadataCacheEntry>();
+  const compilationDatabaseCache: CompilationDatabaseCache = new Map();
   const loggedMetadataErrors = new Set<string>();
+  const loggedCompilationDatabaseErrors = new Set<string>();
 
   const clearCaches = (): void => {
     cache = undefined;
     metadataCache.clear();
+    compilationDatabaseCache.clear();
     loggedMetadataErrors.clear();
+    loggedCompilationDatabaseErrors.clear();
   };
 
   const configurationWatcher = vscode.workspace.onDidChangeConfiguration((event) => {
@@ -143,16 +149,27 @@ export function activate(context: vscode.ExtensionContext): void {
     workspaceFolder: vscode.WorkspaceFolder,
     configuredPath: string
   ): Promise<CompileCommandContext | undefined> => {
+    const isConfigured = configuredPath.trim().length > 0;
     for (const databaseUri of compilationDatabaseUris(workspaceFolder, configuredPath)) {
+      const cacheKey = databaseUri.toString();
+      const cachedContexts = compilationDatabaseCache.get(cacheKey);
+      const pendingContexts = cachedContexts ?? Promise.resolve(
+        vscode.workspace.fs.readFile(databaseUri)
+      ).then((bytes) => parseCompilationDatabase(Buffer.from(bytes).toString("utf8")));
+      if (cachedContexts === undefined) {
+        compilationDatabaseCache.set(cacheKey, pendingContexts);
+      }
       try {
-        const bytes = await vscode.workspace.fs.readFile(databaseUri);
-        const contexts = parseCompilationDatabase(Buffer.from(bytes).toString("utf8"));
-        const command = findCompilationCommand(contexts, document.uri.fsPath);
+        const command = findCompilationCommand(await pendingContexts, document.uri.fsPath);
         if (command !== undefined) {
           return command;
         }
       } catch {
-        // Compilation databases are optional; continue to the next project adapter.
+        compilationDatabaseCache.delete(cacheKey);
+        if (isConfigured && !loggedCompilationDatabaseErrors.has(cacheKey)) {
+          loggedCompilationDatabaseErrors.add(cacheKey);
+          output.appendLine("Configured compilation database is unavailable or invalid.");
+        }
       }
     }
     return undefined;
