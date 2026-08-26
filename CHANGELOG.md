@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Introduce an editor-neutral, immutable AVR compilation context.
+- Resolve settings per source file from `compile_commands.json`.
+- Support safe `arguments` and quoted `command` compilation database entries.
+- Add manual, compilation database, PlatformIO metadata, and INI precedence rules.
+- Add the `AVR Assembly: Show Active Context` command.
+- Stop accepting unrestricted compiler flags and forward only validated preprocessor inputs.
+
 ## 0.1.0
 
 - Discover generic AVR compilation context through PlatformIO project metadata.

@@ -1,8 +1,8 @@
 {
   "name": "avr-asm-intellisense",
   "displayName": "AVR Assembly IntelliSense",
-  "description": "AVR-aware completion and highlighting for GNU assembly in VS Code and PlatformIO projects.",
-  "version": "0.1.0",
+  "description": "Project-aware completion and highlighting for GNU AVR assembly across compilation database, PlatformIO, and manual projects.",
+  "version": "0.2.0",
   "publisher": "local-development",
   "license": "MIT",
   "repository": {
