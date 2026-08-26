@@ -4,11 +4,15 @@ const mocks = vi.hoisted(() => ({
   registeredProvider: undefined as undefined | {
     provideCompletionItems: (...args: unknown[]) => Promise<Array<{ label: string }>>;
   },
+  registeredCommands: new Map<string, (...args: unknown[]) => unknown>(),
   settings: {} as Record<string, unknown>,
   trusted: false,
   readFile: vi.fn(),
   runMetadata: vi.fn(),
-  runPreprocessor: vi.fn()
+  runPreprocessor: vi.fn(),
+  outputAppendLine: vi.fn(),
+  outputShow: vi.fn(),
+  showInformationMessage: vi.fn()
 }));
 
 vi.mock("../src/core/platformioMetadata", async (importOriginal) => ({
@@ -43,6 +47,12 @@ vi.mock("vscode", () => {
   return {
     CompletionItem,
     CompletionItemKind: { Keyword: 1, Variable: 2, Constant: 3 },
+    commands: {
+      registerCommand: (name: string, callback: (...args: unknown[]) => unknown) => {
+        mocks.registeredCommands.set(name, callback);
+        return disposable();
+      }
+    },
     Uri: {
       joinPath: (_base: unknown, name: string) => ({
         scheme: "file",
@@ -57,7 +67,24 @@ vi.mock("vscode", () => {
       }
     },
     window: {
-      createOutputChannel: () => ({ appendLine: vi.fn(), dispose: vi.fn() })
+      activeTextEditor: {
+        document: {
+          uri: {
+            scheme: "file",
+            fsPath: "/workspace/src/main.S",
+            toString: () => "file:///workspace/src/main.S"
+          },
+          languageId: "avr-asm",
+          version: 1,
+          getText: () => "#include <avr/io.h>\nldi r16, 0"
+        }
+      },
+      createOutputChannel: () => ({
+        appendLine: mocks.outputAppendLine,
+        show: mocks.outputShow,
+        dispose: vi.fn()
+      }),
+      showInformationMessage: mocks.showInformationMessage
     },
     workspace: {
       get isTrusted() { return mocks.trusted; },
@@ -79,9 +106,7 @@ vi.mock("vscode", () => {
   };
 });
 
-import { activate } from "../src/extension";
-
-const document = {
+const documentForMock = {
   uri: {
     scheme: "file",
     fsPath: "/workspace/src/main.S",
@@ -90,6 +115,10 @@ const document = {
   version: 1,
   getText: () => "#include <avr/io.h>\nldi r16, 0"
 };
+
+import { activate } from "../src/extension";
+
+const document = documentForMock;
 const position = {};
 const activeToken = { isCancellationRequested: false };
 
@@ -97,9 +126,33 @@ describe("extension integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.registeredProvider = undefined;
+    mocks.registeredCommands.clear();
     mocks.settings = {};
     mocks.trusted = false;
     activate({ subscriptions: [] } as never);
+  });
+
+  it("registers a command that reports the active per-file compilation context", async () => {
+    mocks.trusted = true;
+    mocks.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith("compile_commands.json")) {
+        return Buffer.from(JSON.stringify([{
+          directory: "/workspace",
+          file: "src/main.S",
+          arguments: ["/tools/avr-gcc", "-mmcu=atmega328p", "-DPROJECT=1", "-c", "src/main.S"]
+        }]));
+      }
+      throw new Error("not found");
+    });
+
+    await mocks.registeredCommands.get("avrAsmIntellisense.showActiveContext")?.();
+
+    expect(mocks.outputAppendLine).toHaveBeenCalledWith(expect.stringContaining(
+      "Source: compile_commands.json"
+    ));
+    expect(mocks.outputAppendLine).toHaveBeenCalledWith(expect.stringContaining("MCU: atmega328p"));
+    expect(mocks.outputShow).toHaveBeenCalled();
+    expect(mocks.runMetadata).not.toHaveBeenCalled();
   });
 
   it("returns static completions without reading or executing in an untrusted workspace", async () => {

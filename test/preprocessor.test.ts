@@ -72,11 +72,13 @@ describe("buildPreprocessorArgs", () => {
     expect(buildPreprocessorArgs({
       mcu: "attiny1626",
       defines: ["__AVR_DEV_LIB_NAME__=tn1626", "F_CPU=3333333L"],
+      undefines: ["LEGACY_DEVICE"],
       includePaths: ["/path with spaces/include"]
     })).toEqual([
       "-mmcu=attiny1626",
       "-D__AVR_DEV_LIB_NAME__=tn1626",
       "-DF_CPU=3333333L",
+      "-ULEGACY_DEVICE",
       "-I",
       "/path with spaces/include",
       "-x",
