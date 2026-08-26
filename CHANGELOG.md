@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0
+
+- Discover generic AVR compilation context through PlatformIO project metadata.
+- Support current array-based and legacy string-based PlatformIO compiler flags.
+- Forward validated MCU, macro definitions, and include paths to AVR preprocessing.
+- Add automatic PlatformIO executable discovery and bounded metadata caching.
+- Add QUTy-shaped compatibility tests without board-specific production logic.
+
 ## 0.0.1
 
 - Initial development scaffold.

@@ -58,8 +58,27 @@ describe("validateMcu", () => {
 
 describe("buildPreprocessorArgs", () => {
   it("builds a shell-free stdin preprocessing invocation", () => {
-    expect(buildPreprocessorArgs("atmega328p")).toEqual([
+    expect(buildPreprocessorArgs({ mcu: "atmega328p" })).toEqual([
       "-mmcu=atmega328p",
+      "-x",
+      "assembler-with-cpp",
+      "-E",
+      "-dM",
+      "-"
+    ]);
+  });
+
+  it("passes only validated metadata defines and include paths", () => {
+    expect(buildPreprocessorArgs({
+      mcu: "attiny1626",
+      defines: ["__AVR_DEV_LIB_NAME__=tn1626", "F_CPU=3333333L"],
+      includePaths: ["/path with spaces/include"]
+    })).toEqual([
+      "-mmcu=attiny1626",
+      "-D__AVR_DEV_LIB_NAME__=tn1626",
+      "-DF_CPU=3333333L",
+      "-I",
+      "/path with spaces/include",
       "-x",
       "assembler-with-cpp",
       "-E",
@@ -87,7 +106,7 @@ describe("runAvrPreprocessor", () => {
     ]);
     expect(spawnProcess).toHaveBeenCalledWith(
       "/toolchain path/avr-gcc",
-      buildPreprocessorArgs("atmega328p"),
+      buildPreprocessorArgs({ mcu: "atmega328p" }),
       { shell: false, stdio: ["pipe", "pipe", "pipe"] }
     );
   });

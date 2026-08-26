@@ -2,9 +2,17 @@
   "name": "avr-asm-intellisense",
   "displayName": "AVR Assembly IntelliSense",
   "description": "AVR-aware completion and highlighting for GNU assembly in VS Code and PlatformIO projects.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "local-development",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jacksonriding/avr-asm-intellisense.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jacksonriding/avr-asm-intellisense/issues"
+  },
+  "homepage": "https://github.com/jacksonriding/avr-asm-intellisense#readme",
   "files": [
     "dist/**",
     "syntaxes/**",
@@ -57,8 +65,8 @@
       "properties": {
         "avrAsmIntellisense.compilerPath": {
           "type": "string",
-          "default": "avr-gcc",
-          "description": "Path to avr-gcc. Use the compiler from the active PlatformIO toolchain when necessary."
+          "default": "",
+          "description": "Optional path to avr-gcc. When blank, use PlatformIO metadata and then avr-gcc on PATH."
         },
         "avrAsmIntellisense.mcu": {
           "type": "string",
@@ -69,6 +77,16 @@
           "type": "string",
           "default": "",
           "description": "PlatformIO environment name used when discovering board_build.mcu from platformio.ini."
+        },
+        "avrAsmIntellisense.platformioPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to the PlatformIO executable. When blank, use the PlatformIO IDE path, standard installation, or PATH."
+        },
+        "avrAsmIntellisense.usePlatformioMetadata": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use trusted PlatformIO project metadata to discover the AVR compiler, MCU, defines, and include paths."
         }
       }
     }
@@ -78,7 +96,7 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "package": "npm run compile && npm run check && npm run test:coverage && vsce package --allow-missing-repository --no-dependencies"
+    "package": "npm run compile && npm run check && npm run test:coverage && vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",

@@ -9,10 +9,15 @@ const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
 export interface PreprocessorRequest {
   readonly compilerPath: string;
-  readonly mcu: string;
+  readonly mcu?: string;
+  readonly compilerFlags?: readonly string[];
+  readonly defines?: readonly string[];
+  readonly includePaths?: readonly string[];
   readonly source: string;
   readonly timeoutMs?: number;
 }
+
+export type PreprocessorContext = Omit<PreprocessorRequest, "source" | "timeoutMs">;
 
 export type SpawnProcess = (
   executable: string,
@@ -33,15 +38,55 @@ export function validateMcu(mcu: string): string {
   return mcu;
 }
 
-export function buildPreprocessorArgs(mcu: string): readonly string[] {
-  return Object.freeze([
-    `-mmcu=${validateMcu(mcu)}`,
+function validateDefine(define: string): string {
+  if (define.length > 4_096
+    || !/^[A-Za-z_][A-Za-z0-9_]*(?:=.*)?$/su.test(define)
+    || /[\0\r\n]/u.test(define)) {
+    throw new Error("Invalid AVR preprocessor definition.");
+  }
+  return define;
+}
+
+function validateIncludePath(includePath: string): string {
+  if (includePath.length === 0 || includePath.length > 4_096 || /[\0\r\n]/u.test(includePath)) {
+    throw new Error("Invalid AVR include path.");
+  }
+  return includePath;
+}
+
+function validateCompilerFlag(flag: string): string {
+  if (flag.length === 0 || flag.length > 4_096 || /[\0\r\n]/u.test(flag)) {
+    throw new Error("Invalid AVR compiler flag.");
+  }
+  return flag;
+}
+
+function hasMcuFlag(flags: readonly string[]): boolean {
+  return flags.some((flag) => flag === "-mmcu" || flag.startsWith("-mmcu="));
+}
+
+export function buildPreprocessorArgs(
+  context: Pick<PreprocessorContext, "mcu" | "compilerFlags" | "defines" | "includePaths">
+): readonly string[] {
+  const compilerFlags = [...new Set(context.compilerFlags ?? [])].map(validateCompilerFlag);
+  const args: string[] = [...compilerFlags];
+  if (!hasMcuFlag(args) && context.mcu !== undefined) {
+    args.push(`-mmcu=${validateMcu(context.mcu)}`);
+  }
+  for (const define of new Set(context.defines ?? [])) {
+    args.push(`-D${validateDefine(define)}`);
+  }
+  for (const includePath of new Set(context.includePaths ?? [])) {
+    args.push("-I", validateIncludePath(includePath));
+  }
+  args.push(
     "-x",
     "assembler-with-cpp",
     "-E",
     "-dM",
     "-"
-  ]);
+  );
+  return Object.freeze(args);
 }
 
 export async function runAvrPreprocessor(
@@ -52,7 +97,7 @@ export async function runAvrPreprocessor(
     throw new Error("Invalid AVR compiler path.");
   }
 
-  const args = buildPreprocessorArgs(request.mcu);
+  const args = buildPreprocessorArgs(request);
   const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return await new Promise((resolve, reject) => {
