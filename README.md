@@ -4,10 +4,12 @@ Project-aware language support for GNU AVR assembly (`.S`, `.s`, and `.asm`) in 
 It is build-system neutral: PlatformIO is supported, but it is only one source of AVR
 compilation settings.
 
-The current scaffold provides:
+The extension provides:
 
-- AVR instruction, register, and GNU assembler directive completions
-- Basic AVR assembly syntax highlighting
+- Completions for all 119 unique mnemonics in Microchip's AVR instruction manual
+- Hover documentation with forms, operands, cycle counts, SREG effects, aliases, and availability
+- Signature help that follows the active operand and distinguishes pointer-form overloads
+- AVR instruction, register, and GNU assembler directive syntax highlighting
 - MCU-specific macro completions extracted from `<avr/io.h>` by `avr-gcc -E -dM`
 - Per-file compiler, MCU, define, undefine, and include discovery from `compile_commands.json`
 - Generic PlatformIO metadata discovery for the compiler, MCU, defines, and include paths
@@ -15,6 +17,27 @@ The current scaffold provides:
 - Safe compiler invocation without a shell
 - Graceful fallback to static completions when a toolchain is unavailable
 - An `AVR Assembly: Show Active Context` command for inspecting what was discovered
+
+## Try the instruction help
+
+Open an AVR assembly file and make sure the language indicator says **AVR Assembly**. Hover
+over an instruction such as `LDI`, `LPM`, or `XCH` to see its documentation. Type a space or
+comma after a mnemonic to open operand guidance; use **Trigger Parameter Hints** from the
+Command Palette if parameter hints are disabled globally.
+
+```asm
+start:
+    ldi r16, 0x20
+    lpm r17, Z+
+    out PORTB, r16
+```
+
+The catalogue represents the complete instruction-family union from Microchip's AVR
+Instruction Set Manual, including aliases and device-specific instructions. Availability
+and timing can vary between AVRe, AVRxm, AVRxt, AVRrc, and individual devices, so the hover
+includes explicit caveats and links to the official manual. Target-specific filtering is a
+future enhancement; the extension does not currently hide unsupported instructions for the
+selected MCU.
 
 ## Development
 
@@ -113,7 +136,6 @@ preprocess `<avr/io.h>`.
 ## Roadmap
 
 - Parse local labels, numeric labels, `.equ`, `.set`, includes, and assembler macros
-- Add a complete instruction database, hover documentation, and operand guidance
 - Add go-to-definition, references, semantic tokens, and MCU-aware diagnostics
 - Extract the editor-neutral core behind a Language Server Protocol interface
 - Add Extension Host integration tests and process cancellation

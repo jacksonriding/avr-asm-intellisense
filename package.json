@@ -1,8 +1,8 @@
 {
   "name": "avr-asm-intellisense",
   "displayName": "AVR Assembly IntelliSense",
-  "description": "Project-aware completion and highlighting for GNU AVR assembly across compilation database, PlatformIO, and manual projects.",
-  "version": "0.2.0",
+  "description": "Project-aware completions, instruction documentation, and highlighting for GNU AVR assembly.",
+  "version": "0.3.0",
   "publisher": "local-development",
   "license": "MIT",
   "repository": {

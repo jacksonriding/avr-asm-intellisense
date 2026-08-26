@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Add an immutable catalogue of all 119 unique AVR instruction mnemonics.
+- Add hover documentation for instruction forms, operands, timing, SREG effects, aliases,
+  availability, and the official Microchip manual.
+- Add overload-aware signature help and active-operand tracking.
+- Derive instruction completions from the catalogue and expand TextMate highlighting to match it.
+- Keep instruction help available without a toolchain and in untrusted workspaces.
+
 ## 0.2.0
 
 - Introduce an editor-neutral, immutable AVR compilation context.
