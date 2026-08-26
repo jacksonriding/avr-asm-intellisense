@@ -39,7 +39,8 @@
         ],
         "extensions": [
           ".S",
-          ".s"
+          ".s",
+          ".asm"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -63,6 +64,11 @@
           "type": "string",
           "default": "",
           "description": "AVR MCU name passed to avr-gcc, for example atmega328p."
+        },
+        "avrAsmIntellisense.platformioEnvironment": {
+          "type": "string",
+          "default": "",
+          "description": "PlatformIO environment name used when discovering board_build.mcu from platformio.ini."
         }
       }
     }

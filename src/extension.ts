@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 import { buildCompletionCandidates } from "./core/completions";
+import { parsePlatformioConfig, selectPlatformioMcu } from "./core/platformio";
 import { runAvrPreprocessor } from "./core/preprocessor";
 import type { AvrMacro, CompletionKind } from "./core/types";
 
@@ -16,6 +17,32 @@ const completionKinds: Readonly<Record<CompletionKind, vscode.CompletionItemKind
   device: vscode.CompletionItemKind.Constant
 };
 
+async function resolveMcu(document: vscode.TextDocument): Promise<string> {
+  const configuration = vscode.workspace.getConfiguration("avrAsmIntellisense", document.uri);
+  const configuredMcu = configuration.get<string>("mcu", "").trim();
+  if (configuredMcu.length > 0) {
+    return configuredMcu;
+  }
+
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+  if (workspaceFolder === undefined) {
+    return "";
+  }
+
+  try {
+    const platformioIni = await vscode.workspace.fs.readFile(
+      vscode.Uri.joinPath(workspaceFolder.uri, "platformio.ini")
+    );
+    const requestedEnvironment = configuration.get<string>("platformioEnvironment", "");
+    return selectPlatformioMcu(
+      parsePlatformioConfig(Buffer.from(platformioIni).toString("utf8")),
+      requestedEnvironment
+    ) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("AVR Assembly IntelliSense");
   let cache: SymbolCache | undefined;
@@ -25,9 +52,10 @@ export function activate(context: vscode.ExtensionContext): void {
       let macros: readonly AvrMacro[] = [];
       const configuration = vscode.workspace.getConfiguration("avrAsmIntellisense", document.uri);
       const compilerPath = configuration.get<string>("compilerPath", "avr-gcc");
-      const mcu = configuration.get<string>("mcu", "");
+      const trusted = vscode.workspace.isTrusted;
+      const mcu = trusted ? await resolveMcu(document) : "";
 
-      if (vscode.workspace.isTrusted && mcu.length > 0) {
+      if (trusted && mcu.length > 0) {
         const key = `${document.uri.toString()}:${document.version}:${compilerPath}:${mcu}`;
         try {
           if (cache?.key !== key) {
