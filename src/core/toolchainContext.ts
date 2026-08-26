@@ -1,4 +1,5 @@
 import type { PlatformioCompilationContext } from "./platformioMetadata";
+import { resolveCompilationContext } from "./compilationContext";
 
 export interface ResolvedAvrToolchain {
   readonly compilerPath: string;
@@ -17,24 +18,21 @@ export interface AvrToolchainSources {
 export function resolveAvrToolchain(
   sources: AvrToolchainSources
 ): ResolvedAvrToolchain | undefined {
-  const configuredMcu = sources.configuredMcu?.trim() ?? "";
-  const metadataMcu = sources.metadata?.mcu ?? "";
-  const iniMcu = sources.iniMcu?.trim() ?? "";
-  const mcu = configuredMcu || metadataMcu || iniMcu;
-  if (mcu.length === 0) {
+  const context = resolveCompilationContext({
+    ...(sources.configuredCompilerPath === undefined
+      ? {}
+      : { configuredCompilerPath: sources.configuredCompilerPath }),
+    ...(sources.configuredMcu === undefined ? {} : { configuredMcu: sources.configuredMcu }),
+    ...(sources.metadata === undefined ? {} : { platformio: sources.metadata }),
+    ...(sources.iniMcu === undefined ? {} : { iniMcu: sources.iniMcu })
+  });
+  if (context === undefined) {
     return undefined;
   }
-
-  const configuredCompilerPath = sources.configuredCompilerPath?.trim() ?? "";
-  const compilerPath = configuredCompilerPath || sources.metadata?.compilerPath || "avr-gcc";
-  const metadataMatchesMcu = sources.metadata?.mcu === mcu;
-
   return Object.freeze({
-    compilerPath,
-    mcu,
-    defines: metadataMatchesMcu ? Object.freeze([...sources.metadata.defines]) : Object.freeze([]),
-    includePaths: metadataMatchesMcu
-      ? Object.freeze([...sources.metadata.includePaths])
-      : Object.freeze([])
+    compilerPath: context.compilerPath,
+    mcu: context.mcu,
+    defines: context.defines,
+    includePaths: context.includePaths
   });
 }

@@ -138,6 +138,69 @@ export function activate(context: vscode.ExtensionContext): void {
   compilationDatabaseWatcher.onDidCreate(clearCaches);
   compilationDatabaseWatcher.onDidDelete(clearCaches);
 
+  const findCompileCommandForDocument = async (
+    document: vscode.TextDocument,
+    workspaceFolder: vscode.WorkspaceFolder,
+    configuredPath: string
+  ): Promise<CompileCommandContext | undefined> => {
+    for (const databaseUri of compilationDatabaseUris(workspaceFolder, configuredPath)) {
+      try {
+        const bytes = await vscode.workspace.fs.readFile(databaseUri);
+        const contexts = parseCompilationDatabase(Buffer.from(bytes).toString("utf8"));
+        const command = findCompilationCommand(contexts, document.uri.fsPath);
+        if (command !== undefined) {
+          return command;
+        }
+      } catch {
+        // Compilation databases are optional; continue to the next project adapter.
+      }
+    }
+    return undefined;
+  };
+
+  const resolvePlatformioMetadata = async (
+    workspaceFolder: vscode.WorkspaceFolder,
+    iniContent: string,
+    requestedEnvironment: string,
+    defaultEnvironmentNames: readonly string[],
+    configuration: vscode.WorkspaceConfiguration
+  ): Promise<PlatformioCompilationContext | undefined> => {
+    if (!configuration.get<boolean>("usePlatformioMetadata", true)) {
+      return undefined;
+    }
+    const platformioPath = findPlatformioExecutable(configuration.get<string>("platformioPath", ""));
+    const metadataKey = [
+      workspaceFolder.uri.toString(), requestedEnvironment, platformioPath, hashText(iniContent)
+    ].join(":");
+    let entry = metadataCache.get(metadataKey);
+    if (entry === undefined || entry.expiresAt <= Date.now()) {
+      entry = Object.freeze({
+        expiresAt: Date.now() + METADATA_TTL_MS,
+        result: runPlatformioMetadata({
+          executablePath: platformioPath,
+          projectDir: workspaceFolder.uri.fsPath,
+          ...(requestedEnvironment.length > 0 ? { environmentName: requestedEnvironment } : {})
+        })
+      });
+      boundedCacheSet(metadataCache, metadataKey, entry);
+    }
+    try {
+      return selectPlatformioContext(
+        await entry.result,
+        requestedEnvironment,
+        defaultEnvironmentNames
+      );
+    } catch (error: unknown) {
+      metadataCache.delete(metadataKey);
+      if (!loggedMetadataErrors.has(metadataKey)) {
+        loggedMetadataErrors.add(metadataKey);
+        const message = error instanceof Error ? error.message : "Unknown PlatformIO metadata error.";
+        output.appendLine(message);
+      }
+      return undefined;
+    }
+  };
+
   const resolveContext = async (
     document: vscode.TextDocument
   ): Promise<CompilationContext | undefined> => {
@@ -150,23 +213,11 @@ export function activate(context: vscode.ExtensionContext): void {
       return resolveCompilationContext({ configuredCompilerPath, configuredMcu });
     }
 
-    let compileCommand: CompileCommandContext | undefined;
-    const databaseUris = compilationDatabaseUris(
+    const compileCommand = await findCompileCommandForDocument(
+      document,
       workspaceFolder,
       configuration.get<string>("compileCommandsPath", "")
     );
-    for (const databaseUri of databaseUris) {
-      try {
-        const bytes = await vscode.workspace.fs.readFile(databaseUri);
-        const contexts = parseCompilationDatabase(Buffer.from(bytes).toString("utf8"));
-        compileCommand = findCompilationCommand(contexts, document.uri.fsPath);
-        if (compileCommand !== undefined) {
-          break;
-        }
-      } catch {
-        // Missing or unusable databases are optional; continue to project adapters.
-      }
-    }
     if (compileCommand !== undefined) {
       return resolveCompilationContext({
         configuredCompilerPath,
@@ -187,45 +238,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const iniConfig = parsePlatformioConfig(iniContent);
     const iniMcu = selectPlatformioMcu(iniConfig, requestedEnvironment);
-    let metadata: PlatformioCompilationContext | undefined;
-    if (configuration.get<boolean>("usePlatformioMetadata", true)) {
-      const platformioPath = findPlatformioExecutable(
-        configuration.get<string>("platformioPath", "")
-      );
-      const metadataKey = [
-        workspaceFolder.uri.toString(),
-        requestedEnvironment,
-        platformioPath,
-        hashText(iniContent)
-      ].join(":");
-      let entry = metadataCache.get(metadataKey);
-      if (entry === undefined || entry.expiresAt <= Date.now()) {
-        entry = Object.freeze({
-          expiresAt: Date.now() + METADATA_TTL_MS,
-          result: runPlatformioMetadata({
-            executablePath: platformioPath,
-            projectDir: workspaceFolder.uri.fsPath,
-            ...(requestedEnvironment.length > 0 ? { environmentName: requestedEnvironment } : {})
-          })
-        });
-        boundedCacheSet(metadataCache, metadataKey, entry);
-      }
-      try {
-        const contexts = await entry.result;
-        metadata = selectPlatformioContext(
-          contexts,
-          requestedEnvironment,
-          iniConfig.defaultEnvironmentNames
-        );
-      } catch (error: unknown) {
-        metadataCache.delete(metadataKey);
-        if (!loggedMetadataErrors.has(metadataKey)) {
-          loggedMetadataErrors.add(metadataKey);
-          const message = error instanceof Error ? error.message : "Unknown PlatformIO metadata error.";
-          output.appendLine(message);
-        }
-      }
-    }
+    const metadata = await resolvePlatformioMetadata(
+      workspaceFolder,
+      iniContent,
+      requestedEnvironment,
+      iniConfig.defaultEnvironmentNames,
+      configuration
+    );
 
     return resolveCompilationContext({
       configuredCompilerPath,
