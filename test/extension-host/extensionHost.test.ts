@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 
 import * as vscode from "vscode";
 
+import { pathsEqual } from "./testPath";
+
 function completionLabel(item: vscode.CompletionItem): string {
   return typeof item.label === "string" ? item.label : item.label.label;
 }
@@ -49,16 +51,17 @@ export async function runExtensionHostSmoke(): Promise<void> {
   assert.ok(extension, "AVR Assembly IntelliSense should be available in the Extension Host");
 
   const sourceCheckout = resolve(__dirname, "../..");
+  const targetIsSourceCheckout = pathsEqual(extension.extensionPath, sourceCheckout);
   if (process.env.AVR_ASM_EXTENSION_MODE === "production") {
-    assert.notEqual(
-      resolve(extension.extensionPath),
-      sourceCheckout,
+    assert.equal(
+      targetIsSourceCheckout,
+      false,
       "packaged smoke must not load the source checkout as the target extension"
     );
   } else {
     assert.equal(
-      resolve(extension.extensionPath),
-      sourceCheckout,
+      targetIsSourceCheckout,
+      true,
       "source smoke should load the repository as its development extension"
     );
   }
