@@ -6,6 +6,9 @@
 - Centralize shell-free AVR GCC and PlatformIO execution behind a bounded process runner.
 - Propagate completion cancellation and extension shutdown into active tool processes.
 - Preserve shared PlatformIO metadata discovery while allowing individual waiters to cancel safely.
+- Add cross-platform CI for type checks, coverage, audit, packaging, and supported VS Code versions.
+- Add real Extension Host smoke coverage for activation, language associations, completions,
+  hover, signature help, commands, and an installed production VSIX.
 
 ## 0.3.0
 

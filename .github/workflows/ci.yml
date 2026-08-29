@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and packaged VSIX
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Unit tests and coverage
+        run: npm run test:coverage
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+
+      - name: Build extension and smoke tests
+        run: npm run compile && npm run compile:extension-tests
+
+      - name: Package VSIX
+        run: npm run package:vsix
+
+      - name: Install and test packaged VSIX
+        run: xvfb-run -a node out/extension-host/runPackagedTest.js
+
+  extension-host:
+    name: Extension Host (${{ matrix.os }}, VS Code ${{ matrix.vscode }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            vscode: stable
+          - os: macos-latest
+            vscode: stable
+          - os: windows-latest
+            vscode: stable
+          - os: ubuntu-latest
+            vscode: 1.90.0
+
+    env:
+      VSCODE_TEST_VERSION: ${{ matrix.vscode }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Extension Host smoke
+        run: xvfb-run -a npm run test:extension
+        if: runner.os == 'Linux'
+
+      - name: Extension Host smoke
+        run: npm run test:extension
+        if: runner.os != 'Linux'

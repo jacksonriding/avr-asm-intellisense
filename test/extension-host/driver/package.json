@@ -1,0 +1,11 @@
+{
+  "name": "avr-asm-intellisense-smoke-driver",
+  "displayName": "AVR Assembly IntelliSense Smoke Driver",
+  "description": "Test-only Extension Host driver for the packaged extension.",
+  "version": "0.0.0",
+  "publisher": "local-development",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  }
+}

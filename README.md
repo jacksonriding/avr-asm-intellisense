@@ -41,14 +41,22 @@ selected MCU.
 
 ## Development
 
+The Extension Host harness requires Node.js 22 or newer. CI uses Node.js 24.
+
 ```sh
 npm install
 npm test
 npm run check
 npm run compile
+npm run test:extension
+npm run test:extension:packaged
 ```
 
-Press `F5` in VS Code to start an Extension Development Host.
+`test:extension` exercises the source checkout in a real Extension Host. The packaged
+variant builds, installs, and activates the generated VSIX in an isolated test profile.
+On headless Linux, install the Xvfb package and prefix either command with
+`xvfb-run -a`. Press `F5` in VS Code to start an interactive Extension Development
+Host.
 
 ## How project settings are resolved
 

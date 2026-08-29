@@ -106,15 +106,21 @@
   },
   "scripts": {
     "compile": "tsc -p tsconfig.json",
+    "compile:extension-tests": "tsc -p tsconfig.extension-tests.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "npm run test:unit",
+    "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "package": "npm run compile && npm run check && npm run test:coverage && vsce package --no-dependencies"
+    "test:extension": "npm run compile && npm run compile:extension-tests && node out/extension-host/runTest.js",
+    "test:extension:packaged": "npm run package && npm run compile:extension-tests && node out/extension-host/runPackagedTest.js",
+    "package:vsix": "vsce package --no-dependencies",
+    "package": "npm run compile && npm run check && npm run test:coverage && npm run package:vsix"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
     "@types/vscode": "^1.90.0",
     "@vitest/coverage-v8": "^3.2.4",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.6.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
