@@ -33,7 +33,13 @@ interface SymbolCache {
 
 interface MetadataCacheEntry {
   readonly expiresAt: number;
+  readonly result: readonly PlatformioCompilationContext[];
+}
+
+interface PendingMetadataEntry {
+  readonly controller: AbortController;
   readonly result: Promise<readonly PlatformioCompilationContext[]>;
+  readonly waiters: Set<symbol>;
 }
 
 type CompilationDatabaseCache = Map<string, Promise<readonly CompileCommandContext[]>>;
@@ -75,6 +81,10 @@ function findPlatformioExecutable(configuredPath: string): string {
 
 function hashText(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }
 
 function completionItems(macros: readonly AvrMacro[]): vscode.CompletionItem[] {
@@ -123,13 +133,48 @@ export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("AVR Assembly IntelliSense");
   let cache: SymbolCache | undefined;
   const metadataCache = new Map<string, MetadataCacheEntry>();
+  const pendingMetadataCache = new Map<string, PendingMetadataEntry>();
   const compilationDatabaseCache: CompilationDatabaseCache = new Map();
   const loggedMetadataErrors = new Set<string>();
   const loggedCompilationDatabaseErrors = new Set<string>();
+  const activeProcessControllers = new Set<AbortController>();
+
+  const abortActiveProcesses = (): void => {
+    for (const controller of activeProcessControllers) {
+      controller.abort();
+    }
+    activeProcessControllers.clear();
+  };
+
+  const processScope = (cancellationToken?: vscode.CancellationToken): Readonly<{
+    signal: AbortSignal;
+    dispose(): void;
+  }> => {
+    const controller = new AbortController();
+    activeProcessControllers.add(controller);
+    const cancellationSubscription = cancellationToken?.onCancellationRequested(
+      () => controller.abort()
+    );
+    if (cancellationToken?.isCancellationRequested === true) {
+      controller.abort();
+    }
+    return Object.freeze({
+      signal: controller.signal,
+      dispose: () => {
+        cancellationSubscription?.dispose();
+        activeProcessControllers.delete(controller);
+      }
+    });
+  };
 
   const clearCaches = (): void => {
+    abortActiveProcesses();
+    for (const entry of pendingMetadataCache.values()) {
+      entry.controller.abort();
+    }
     cache = undefined;
     metadataCache.clear();
+    pendingMetadataCache.clear();
     compilationDatabaseCache.clear();
     loggedMetadataErrors.clear();
     loggedCompilationDatabaseErrors.clear();
@@ -187,7 +232,8 @@ export function activate(context: vscode.ExtensionContext): void {
     iniContent: string,
     requestedEnvironment: string,
     defaultEnvironmentNames: readonly string[],
-    configuration: vscode.WorkspaceConfiguration
+    configuration: vscode.WorkspaceConfiguration,
+    signal?: AbortSignal
   ): Promise<PlatformioCompilationContext | undefined> => {
     if (!configuration.get<boolean>("usePlatformioMetadata", true)) {
       return undefined;
@@ -196,37 +242,88 @@ export function activate(context: vscode.ExtensionContext): void {
     const metadataKey = [
       workspaceFolder.uri.toString(), requestedEnvironment, platformioPath, hashText(iniContent)
     ].join(":");
-    let entry = metadataCache.get(metadataKey);
-    if (entry === undefined || entry.expiresAt <= Date.now()) {
-      entry = Object.freeze({
-        expiresAt: Date.now() + METADATA_TTL_MS,
-        result: runPlatformioMetadata({
-          executablePath: platformioPath,
-          projectDir: workspaceFolder.uri.fsPath,
-          ...(requestedEnvironment.length > 0 ? { environmentName: requestedEnvironment } : {})
-        })
-      });
-      boundedCacheSet(metadataCache, metadataKey, entry);
-    }
-    try {
+    const entry = metadataCache.get(metadataKey);
+    if (entry !== undefined && entry.expiresAt > Date.now()) {
       return selectPlatformioContext(
-        await entry.result,
+        entry.result,
+        requestedEnvironment,
+        defaultEnvironmentNames
+      );
+    }
+    let pendingEntry = pendingMetadataCache.get(metadataKey);
+    if (pendingEntry === undefined) {
+      if (pendingMetadataCache.size >= MAX_METADATA_CACHE_ENTRIES) {
+        for (const pending of pendingMetadataCache.values()) {
+          pending.controller.abort();
+        }
+        pendingMetadataCache.clear();
+      }
+      const controller = new AbortController();
+      const result = runPlatformioMetadata({
+        executablePath: platformioPath,
+        projectDir: workspaceFolder.uri.fsPath,
+        ...(requestedEnvironment.length > 0 ? { environmentName: requestedEnvironment } : {}),
+        signal: controller.signal
+      });
+      pendingEntry = Object.freeze({ controller, result, waiters: new Set<symbol>() });
+      pendingMetadataCache.set(metadataKey, pendingEntry);
+    }
+    const waiter = Symbol(metadataKey);
+    pendingEntry.waiters.add(waiter);
+    let cancelWait: (() => void) | undefined;
+    try {
+      const result = signal === undefined
+        ? await pendingEntry.result
+        : await Promise.race([
+            pendingEntry.result,
+            new Promise<never>((_resolve, reject) => {
+              cancelWait = () => reject(new Error("PlatformIO metadata was cancelled."));
+              signal.addEventListener("abort", cancelWait, { once: true });
+              if (signal.aborted) {
+                cancelWait();
+              }
+            })
+          ]);
+      if (signal?.aborted !== true) {
+        boundedCacheSet(metadataCache, metadataKey, Object.freeze({
+          expiresAt: Date.now() + METADATA_TTL_MS,
+          result
+        }));
+      }
+      return selectPlatformioContext(
+        result,
         requestedEnvironment,
         defaultEnvironmentNames
       );
     } catch (error: unknown) {
       metadataCache.delete(metadataKey);
+      if (signal?.aborted === true) {
+        return undefined;
+      }
       if (!loggedMetadataErrors.has(metadataKey)) {
         loggedMetadataErrors.add(metadataKey);
         const message = error instanceof Error ? error.message : "Unknown PlatformIO metadata error.";
         output.appendLine(message);
       }
       return undefined;
+    } finally {
+      if (cancelWait !== undefined) {
+        signal?.removeEventListener("abort", cancelWait);
+      }
+      pendingEntry.waiters.delete(waiter);
+      if (pendingEntry.waiters.size === 0
+        && pendingMetadataCache.get(metadataKey) === pendingEntry) {
+        pendingMetadataCache.delete(metadataKey);
+        if (signal?.aborted === true) {
+          pendingEntry.controller.abort();
+        }
+      }
     }
   };
 
   const resolveContext = async (
-    document: vscode.TextDocument
+    document: vscode.TextDocument,
+    signal?: AbortSignal
   ): Promise<CompilationContext | undefined> => {
     const configuration = vscode.workspace.getConfiguration("avrAsmIntellisense", document.uri);
     const configuredMcu = configuration.get<string>("mcu", "");
@@ -242,6 +339,9 @@ export function activate(context: vscode.ExtensionContext): void {
       workspaceFolder,
       configuration.get<string>("compileCommandsPath", "")
     );
+    if (isAborted(signal)) {
+      return undefined;
+    }
     if (compileCommand !== undefined) {
       return resolveCompilationContext({
         configuredCompilerPath,
@@ -267,8 +367,12 @@ export function activate(context: vscode.ExtensionContext): void {
       iniContent,
       requestedEnvironment,
       iniConfig.defaultEnvironmentNames,
-      configuration
+      configuration,
+      signal
     );
+    if (isAborted(signal)) {
+      return undefined;
+    }
 
     return resolveCompilationContext({
       configuredCompilerPath,
@@ -293,10 +397,15 @@ export function activate(context: vscode.ExtensionContext): void {
         output.show(true);
         return;
       }
+      const scope = processScope();
       try {
-        output.appendLine(formatActiveContext(await resolveContext(document)));
+        output.appendLine(formatActiveContext(await resolveContext(document, scope.signal)));
       } catch {
-        output.appendLine("Unable to resolve the active AVR context. Static completions remain available.");
+        if (!scope.signal.aborted) {
+          output.appendLine("Unable to resolve the active AVR context. Static completions remain available.");
+        }
+      } finally {
+        scope.dispose();
       }
       output.show(true);
     }
@@ -309,24 +418,28 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!trusted || cancellationToken.isCancellationRequested) {
         return completionItems(macros);
       }
-      const toolchain = await resolveContext(document);
-
-      if (toolchain !== undefined && !cancellationToken.isCancellationRequested) {
-        const toolchainKey = JSON.stringify(toolchain);
-        const key = `${document.uri.toString()}:${document.version}:${toolchainKey}`;
-        try {
+      const scope = processScope(cancellationToken);
+      try {
+        const toolchain = await resolveContext(document, scope.signal);
+        if (toolchain !== undefined && !scope.signal.aborted) {
+          const toolchainKey = JSON.stringify(toolchain);
+          const key = `${document.uri.toString()}:${document.version}:${toolchainKey}`;
           if (cache?.key !== key) {
             const source = `#include <avr/io.h>\n${document.getText()}`;
             cache = Object.freeze({
               key,
-              macros: await runAvrPreprocessor({ ...toolchain, source })
+              macros: await runAvrPreprocessor({ ...toolchain, source, signal: scope.signal })
             });
           }
           macros = cache.macros;
-        } catch (error: unknown) {
+        }
+      } catch (error: unknown) {
+        if (!scope.signal.aborted) {
           const message = error instanceof Error ? error.message : "Unknown preprocessing error.";
           output.appendLine(message);
         }
+      } finally {
+        scope.dispose();
       }
 
       return completionItems(macros);
@@ -341,6 +454,7 @@ export function activate(context: vscode.ExtensionContext): void {
     configurationWatcher,
     platformioWatcher,
     compilationDatabaseWatcher,
+    { dispose: abortActiveProcesses },
     ...instructionProviders
   );
 }

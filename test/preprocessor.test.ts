@@ -138,6 +138,23 @@ describe("runAvrPreprocessor", () => {
     }, spawnReturning(process))).rejects.toThrow("Unable to start the configured AVR compiler.");
   });
 
+  it("cancels active preprocessing and kills the compiler", async () => {
+    const controller = new AbortController();
+    const process = createFakeChild();
+    const pending = runAvrPreprocessor({
+      compilerPath: "avr-gcc",
+      mcu: "atmega328p",
+      source: "",
+      signal: controller.signal
+    }, spawnReturning(process));
+
+    controller.abort();
+    process.child.emit("close", 0);
+
+    await expect(pending).rejects.toThrow("AVR preprocessing was cancelled.");
+    expect(process.kill).toHaveBeenCalledOnce();
+  });
+
   it("enforces timeout and output limits", async () => {
     const stalled = createFakeChild();
     await expect(runAvrPreprocessor({

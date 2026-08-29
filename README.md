@@ -135,11 +135,10 @@ preprocess `<avr/io.h>`.
 
 ## Roadmap
 
-- Parse local labels, numeric labels, `.equ`, `.set`, includes, and assembler macros
-- Add go-to-definition, references, semantic tokens, and MCU-aware diagnostics
-- Extract the editor-neutral core behind a Language Server Protocol interface
-- Add Extension Host integration tests and process cancellation
-- Test real toolchains across classic ATmega/ATtiny, modern AVR families, and QUTy
+The project is working toward comprehensive GNU AVR language, device, editor, project,
+validation, and reliability coverage. See the [versioned roadmap](docs/ROADMAP.md) for
+milestones, measurable release gates, the immediate implementation slice, and explicit
+non-goals.
 
 ## Status
 

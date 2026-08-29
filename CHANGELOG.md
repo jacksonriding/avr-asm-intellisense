@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add the versioned roadmap for comprehensive GNU AVR tooling coverage.
+- Centralize shell-free AVR GCC and PlatformIO execution behind a bounded process runner.
+- Propagate completion cancellation and extension shutdown into active tool processes.
+- Preserve shared PlatformIO metadata discovery while allowing individual waiters to cancel safely.
+
 ## 0.3.0
 
 - Add an immutable catalogue of all 119 unique AVR instruction mnemonics.

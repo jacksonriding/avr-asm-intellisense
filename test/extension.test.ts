@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   runPreprocessor: vi.fn(),
   outputAppendLine: vi.fn(),
   outputShow: vi.fn(),
-  showInformationMessage: vi.fn()
+  showInformationMessage: vi.fn(),
+  subscriptions: [] as Array<{ dispose(): void }>
 }));
 
 vi.mock("../src/core/platformioMetadata", async (importOriginal) => ({
@@ -187,7 +188,32 @@ import { activate } from "../src/extension";
 
 const document = documentForMock;
 const position = {};
-const activeToken = { isCancellationRequested: false };
+const activeToken = {
+  isCancellationRequested: false,
+  onCancellationRequested: () => ({ dispose: vi.fn() })
+};
+
+function createCancellationToken(): {
+  readonly token: {
+    readonly isCancellationRequested: boolean;
+    onCancellationRequested(callback: () => void): { dispose(): void };
+  };
+  readonly cancel: () => void;
+} {
+  const controller = new AbortController();
+  return {
+    token: {
+      get isCancellationRequested() { return controller.signal.aborted; },
+      onCancellationRequested(callback) {
+        controller.signal.addEventListener("abort", callback, { once: true });
+        return {
+          dispose: () => controller.signal.removeEventListener("abort", callback)
+        };
+      }
+    },
+    cancel: () => controller.abort()
+  };
+}
 
 describe("extension integration", () => {
   beforeEach(() => {
@@ -198,7 +224,8 @@ describe("extension integration", () => {
     mocks.registeredCommands.clear();
     mocks.settings = {};
     mocks.trusted = false;
-    activate({ subscriptions: [] } as never);
+    mocks.subscriptions = [];
+    activate({ subscriptions: mocks.subscriptions } as never);
   });
 
   it("provides instruction hover and signature help without executing project tools", () => {
@@ -319,10 +346,10 @@ describe("extension integration", () => {
       activeToken
     );
 
-    expect(mocks.runMetadata).toHaveBeenCalledWith({
+    expect(mocks.runMetadata).toHaveBeenCalledWith(expect.objectContaining({
       executablePath: "pio",
       projectDir: "/workspace"
-    });
+    }));
     expect(mocks.runPreprocessor).toHaveBeenCalledWith(expect.objectContaining({
       compilerPath: "/pio/avr-gcc",
       mcu: "attiny1626",
@@ -352,5 +379,131 @@ describe("extension integration", () => {
 
     expect(mocks.runMetadata).toHaveBeenCalledTimes(2);
     expect(mocks.runPreprocessor).toHaveBeenCalledOnce();
+  });
+
+  it("shares one in-flight PlatformIO discovery across completion requests", async () => {
+    mocks.trusted = true;
+    mocks.settings = { usePlatformioMetadata: true };
+    mocks.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith("platformio.ini")) {
+        return Buffer.from("[env:test]\nplatform = atmelavr\n");
+      }
+      throw new Error("not found");
+    });
+    let resolveMetadata: ((value: readonly unknown[]) => void) | undefined;
+    mocks.runMetadata.mockImplementation(async () => await new Promise((resolve) => {
+      resolveMetadata = resolve;
+    }));
+    mocks.runPreprocessor.mockResolvedValue([]);
+
+    const first = mocks.registeredProvider?.provideCompletionItems(document, position, activeToken);
+    const second = mocks.registeredProvider?.provideCompletionItems(document, position, activeToken);
+    await vi.waitFor(() => expect(mocks.runMetadata).toHaveBeenCalledOnce());
+    resolveMetadata?.([{
+      environmentName: "test",
+      compilerPath: "/pio/avr-gcc",
+      mcu: "atmega328p",
+      defines: [],
+      includePaths: []
+    }]);
+
+    await Promise.all([first, second]);
+    expect(mocks.runMetadata).toHaveBeenCalledOnce();
+  });
+
+  it("cancels active PlatformIO discovery without logging a failure", async () => {
+    mocks.trusted = true;
+    mocks.settings = { usePlatformioMetadata: true };
+    mocks.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith("platformio.ini")) {
+        return Buffer.from("[env:test]\nplatform = atmelavr\nboard_build.mcu = atmega328p\n");
+      }
+      throw new Error("not found");
+    });
+    mocks.runMetadata.mockImplementation(async (request: { signal?: AbortSignal }) =>
+      await new Promise((_resolve, reject) => {
+        request.signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+      }));
+    const cancellation = createCancellationToken();
+
+    const pending = mocks.registeredProvider?.provideCompletionItems(
+      document,
+      position,
+      cancellation.token
+    );
+    await vi.waitFor(() => expect(mocks.runMetadata).toHaveBeenCalledOnce());
+    const request = mocks.runMetadata.mock.calls[0]?.[0] as { signal?: AbortSignal };
+    cancellation.cancel();
+
+    await expect(pending).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "LDI" })
+    ]));
+    expect(request.signal?.aborted).toBe(true);
+    expect(mocks.runPreprocessor).not.toHaveBeenCalled();
+    expect(mocks.outputAppendLine).not.toHaveBeenCalled();
+  });
+
+  it("cancels active AVR preprocessing", async () => {
+    mocks.trusted = true;
+    mocks.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith("compile_commands.json")) {
+        return Buffer.from(JSON.stringify([{
+          directory: "/workspace",
+          file: "src/main.S",
+          arguments: ["avr-gcc", "-mmcu=atmega328p", "-c", "src/main.S"]
+        }]));
+      }
+      throw new Error("not found");
+    });
+    mocks.runPreprocessor.mockImplementation(async (request: { signal?: AbortSignal }) =>
+      await new Promise((_resolve, reject) => {
+        request.signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+      }));
+    const cancellation = createCancellationToken();
+
+    const pending = mocks.registeredProvider?.provideCompletionItems(
+      document,
+      position,
+      cancellation.token
+    );
+    await vi.waitFor(() => expect(mocks.runPreprocessor).toHaveBeenCalledOnce());
+    const request = mocks.runPreprocessor.mock.calls[0]?.[0] as { signal?: AbortSignal };
+    cancellation.cancel();
+
+    await expect(pending).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "LDI" })
+    ]));
+    expect(request.signal?.aborted).toBe(true);
+    expect(mocks.outputAppendLine).not.toHaveBeenCalled();
+  });
+
+  it("cancels active tool processes when the extension is disposed", async () => {
+    mocks.trusted = true;
+    mocks.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith("compile_commands.json")) {
+        return Buffer.from(JSON.stringify([{
+          directory: "/workspace",
+          file: "src/main.S",
+          arguments: ["avr-gcc", "-mmcu=atmega328p", "-c", "src/main.S"]
+        }]));
+      }
+      throw new Error("not found");
+    });
+    mocks.runPreprocessor.mockImplementation(async (request: { signal?: AbortSignal }) =>
+      await new Promise((_resolve, reject) => {
+        request.signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+      }));
+
+    const pending = mocks.registeredProvider?.provideCompletionItems(document, position, activeToken);
+    await vi.waitFor(() => expect(mocks.runPreprocessor).toHaveBeenCalledOnce());
+    const request = mocks.runPreprocessor.mock.calls[0]?.[0] as { signal?: AbortSignal };
+    for (const subscription of mocks.subscriptions) {
+      subscription.dispose();
+    }
+
+    await expect(pending).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "LDI" })
+    ]));
+    expect(request.signal?.aborted).toBe(true);
   });
 });

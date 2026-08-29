@@ -15,6 +15,7 @@
   "homepage": "https://github.com/jacksonriding/avr-asm-intellisense#readme",
   "files": [
     "dist/**",
+    "docs/**",
     "syntaxes/**",
     "language-configuration.json",
     "README.md",

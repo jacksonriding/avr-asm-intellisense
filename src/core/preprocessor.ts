@@ -1,6 +1,9 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-
 import { parseObjectMacros } from "./macroParser";
+import {
+  ProcessExecutionError,
+  runBoundedProcess,
+  type SpawnProcess
+} from "./processRunner";
 import type { AvrMacro } from "./types";
 
 const MCU_PATTERN = /^[A-Za-z0-9_+-]+$/u;
@@ -15,21 +18,11 @@ export interface PreprocessorRequest {
   readonly includePaths?: readonly string[];
   readonly source: string;
   readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
 }
 
-export type PreprocessorContext = Omit<PreprocessorRequest, "source" | "timeoutMs">;
-
-export type SpawnProcess = (
-  executable: string,
-  args: readonly string[],
-  options: Readonly<{ shell: false; stdio: readonly ["pipe", "pipe", "pipe"] }>
-) => ChildProcessWithoutNullStreams;
-
-const defaultSpawnProcess: SpawnProcess = (executable, args, options) =>
-  spawn(executable, [...args], {
-    shell: options.shell,
-    stdio: [...options.stdio]
-  });
+export type PreprocessorContext = Omit<PreprocessorRequest, "signal" | "source" | "timeoutMs">;
+export type { SpawnProcess } from "./processRunner";
 
 export function validateMcu(mcu: string): string {
   if (!MCU_PATTERN.test(mcu)) {
@@ -89,65 +82,40 @@ export function buildPreprocessorArgs(
 
 export async function runAvrPreprocessor(
   request: PreprocessorRequest,
-  spawnProcess: SpawnProcess = defaultSpawnProcess
+  spawnProcess?: SpawnProcess
 ): Promise<readonly AvrMacro[]> {
   if (request.compilerPath.length === 0 || request.compilerPath.includes("\0")) {
     throw new Error("Invalid AVR compiler path.");
   }
 
   const args = buildPreprocessorArgs(request);
-  const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  let result;
+  try {
+    result = await runBoundedProcess({
+      executable: request.compilerPath,
+      args,
+      input: request.source,
+      timeoutMs: request.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+      ...(request.signal === undefined ? {} : { signal: request.signal })
+    }, spawnProcess);
+  } catch (error: unknown) {
+    if (error instanceof ProcessExecutionError) {
+      const message = error.reason === "aborted" ? "AVR preprocessing was cancelled."
+        : (error.reason === "timeout" ? "AVR preprocessor timed out."
+          : (error.reason === "outputLimit"
+            ? "AVR preprocessor output exceeded the safety limit."
+            : "Unable to start the configured AVR compiler."));
+      throw new Error(message);
+    }
+    throw error;
+  }
 
-  return await new Promise((resolve, reject) => {
-    const child = spawnProcess(request.compilerPath, args, {
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"]
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let outputBytes = 0;
-    let settled = false;
-
-    const finish = (callback: () => void): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      callback();
-    };
-
-    const collect = (target: Buffer[], chunk: Buffer): void => {
-      outputBytes += chunk.byteLength;
-      if (outputBytes > MAX_OUTPUT_BYTES) {
-        child.kill();
-        finish(() => reject(new Error("AVR preprocessor output exceeded the safety limit.")));
-        return;
-      }
-      target.push(chunk);
-    };
-
-    const timer = setTimeout(() => {
-      child.kill();
-      finish(() => reject(new Error("AVR preprocessor timed out.")));
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
-    child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
-    child.on("error", () => {
-      finish(() => reject(new Error("Unable to start the configured AVR compiler.")));
-    });
-    child.on("close", (code) => {
-      finish(() => {
-        if (code !== 0) {
-          const detail = Buffer.concat(stderr).toString("utf8").trim().slice(0, 500);
-          reject(new Error(detail.length > 0 ? `AVR preprocessing failed: ${detail}` : "AVR preprocessing failed."));
-          return;
-        }
-        resolve(parseObjectMacros(Buffer.concat(stdout).toString("utf8")));
-      });
-    });
-
-    child.stdin.end(request.source);
-  });
+  if (result.exitCode !== 0) {
+    const detail = result.stderr.trim().slice(0, 500);
+    throw new Error(detail.length > 0
+      ? `AVR preprocessing failed: ${detail}`
+      : "AVR preprocessing failed.");
+  }
+  return parseObjectMacros(result.stdout);
 }

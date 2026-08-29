@@ -169,6 +169,22 @@ describe("runPlatformioMetadata", () => {
     expect(noisy.kill).toHaveBeenCalledOnce();
   });
 
+  it("cancels active metadata discovery and kills PlatformIO", async () => {
+    const controller = new AbortController();
+    const process = createFakeChild();
+    const pending = runPlatformioMetadata({
+      executablePath: "pio",
+      projectDir: "/project",
+      signal: controller.signal
+    }, vi.fn(() => process.child));
+
+    controller.abort();
+    process.child.emit("close", 0);
+
+    await expect(pending).rejects.toThrow("PlatformIO metadata was cancelled.");
+    expect(process.kill).toHaveBeenCalledOnce();
+  });
+
   it("validates executable, project, and environment inputs", async () => {
     const spawnProcess = vi.fn();
     await expect(runPlatformioMetadata({ executablePath: "", projectDir: "/project" }, spawnProcess))

@@ -1,4 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  ProcessExecutionError,
+  runBoundedProcess,
+  type SpawnProcess
+} from "./processRunner";
 
 const ENVIRONMENT_PATTERN = /^[A-Za-z0-9_.-]+$/u;
 const DEFINE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*(?:=.*)?$/su;
@@ -19,26 +23,10 @@ export interface PlatformioMetadataRequest {
   readonly projectDir: string;
   readonly environmentName?: string;
   readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
 }
 
-interface MetadataProcessOptions {
-  readonly cwd: string;
-  readonly shell: false;
-  readonly stdio: readonly ["pipe", "pipe", "pipe"];
-}
-
-export type MetadataSpawnProcess = (
-  executable: string,
-  args: readonly string[],
-  options: MetadataProcessOptions
-) => ChildProcessWithoutNullStreams;
-
-const defaultSpawnProcess: MetadataSpawnProcess = (executable, args, options) =>
-  spawn(executable, [...args], {
-    cwd: options.cwd,
-    shell: options.shell,
-    stdio: [...options.stdio]
-  });
+export type MetadataSpawnProcess = SpawnProcess;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -171,7 +159,7 @@ export function selectPlatformioContext(
 
 export async function runPlatformioMetadata(
   request: PlatformioMetadataRequest,
-  spawnProcess: MetadataSpawnProcess = defaultSpawnProcess
+  spawnProcess?: MetadataSpawnProcess
 ): Promise<readonly PlatformioCompilationContext[]> {
   if (!validText(request.executablePath)) {
     throw new Error("Invalid PlatformIO executable path.");
@@ -191,62 +179,34 @@ export async function runPlatformioMetadata(
   if (request.environmentName !== undefined && request.environmentName.length > 0) {
     args.push("--environment", request.environmentName);
   }
-  const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  return await new Promise((resolve, reject) => {
-    const child = spawnProcess(request.executablePath, args, {
+  let result;
+  try {
+    result = await runBoundedProcess({
+      executable: request.executablePath,
+      args,
       cwd: request.projectDir,
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"]
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let outputBytes = 0;
-    let settled = false;
+      input: "",
+      timeoutMs: request.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+      ...(request.signal === undefined ? {} : { signal: request.signal })
+    }, spawnProcess);
+  } catch (error: unknown) {
+    if (error instanceof ProcessExecutionError) {
+      const message = error.reason === "aborted" ? "PlatformIO metadata was cancelled."
+        : (error.reason === "timeout" ? "PlatformIO metadata timed out."
+          : (error.reason === "outputLimit"
+            ? "PlatformIO metadata output exceeded the safety limit."
+            : "Unable to start the configured PlatformIO executable."));
+      throw new Error(message);
+    }
+    throw error;
+  }
 
-    const finish = (callback: () => void): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      callback();
-    };
-    const collect = (target: Buffer[], chunk: Buffer): void => {
-      outputBytes += chunk.byteLength;
-      if (outputBytes > MAX_OUTPUT_BYTES) {
-        child.kill();
-        finish(() => reject(new Error("PlatformIO metadata output exceeded the safety limit.")));
-        return;
-      }
-      target.push(chunk);
-    };
-    const timer = setTimeout(() => {
-      child.kill();
-      finish(() => reject(new Error("PlatformIO metadata timed out.")));
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
-    child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
-    child.on("error", () => {
-      finish(() => reject(new Error("Unable to start the configured PlatformIO executable.")));
-    });
-    child.on("close", (code) => {
-      finish(() => {
-        if (code !== 0) {
-          const detail = Buffer.concat(stderr).toString("utf8").trim().slice(0, 500);
-          reject(new Error(detail.length > 0
-            ? `PlatformIO metadata failed: ${detail}`
-            : "PlatformIO metadata failed."));
-          return;
-        }
-        try {
-          resolve(parsePlatformioMetadata(Buffer.concat(stdout).toString("utf8")));
-        } catch (error: unknown) {
-          reject(error);
-        }
-      });
-    });
-    child.stdin.end();
-  });
+  if (result.exitCode !== 0) {
+    const detail = result.stderr.trim().slice(0, 500);
+    throw new Error(detail.length > 0
+      ? `PlatformIO metadata failed: ${detail}`
+      : "PlatformIO metadata failed.");
+  }
+  return parsePlatformioMetadata(result.stdout);
 }
