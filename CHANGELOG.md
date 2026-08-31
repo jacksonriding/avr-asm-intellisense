@@ -10,6 +10,8 @@
 - Add real Extension Host smoke coverage for activation, language associations, completions,
   hover, signature help, commands, and an installed production VSIX.
 - Add deterministic Restricted Mode Extension Host coverage for static language features.
+- Extract project-context discovery into an editor-neutral service with bounded caches,
+  shared cancellation, and stale-result rejection.
 
 ## 0.3.0
 

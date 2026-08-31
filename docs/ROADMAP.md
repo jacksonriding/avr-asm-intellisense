@@ -34,8 +34,8 @@ coverage claims remain specific and testable.
 
 Progress: the bounded process runner, cross-platform CI definition, source Extension
 Host smoke suite, installed-VSIX smoke suite, and Restricted Mode Extension Host coverage
-are implemented. Project-context extraction and parser/workspace latency fixtures remain
-before this milestone closes.
+are implemented. Project-context discovery and caching are now editor-neutral and reject
+stale results. Parser/workspace latency fixtures remain before this milestone closes.
 
 - Add CI for type checking, tests and coverage, audit, packaging, and VSIX smoke
   installation.
