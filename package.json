@@ -112,6 +112,7 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:extension": "npm run compile && npm run compile:extension-tests && node out/extension-host/runTest.js",
+    "test:extension:restricted": "npm run compile && npm run compile:extension-tests && node out/extension-host/runRestrictedTest.js",
     "test:extension:packaged": "npm run package && npm run compile:extension-tests && node out/extension-host/runPackagedTest.js",
     "package:vsix": "vsce package --no-dependencies",
     "package": "npm run compile && npm run check && npm run test:coverage && npm run package:vsix"

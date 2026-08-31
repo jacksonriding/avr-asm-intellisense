@@ -92,3 +92,7 @@ jobs:
       - name: Extension Host smoke
         run: npm run test:extension
         if: runner.os != 'Linux'
+
+      - name: Restricted Mode Extension Host smoke
+        run: xvfb-run -a npm run test:extension:restricted
+        if: runner.os == 'Linux'

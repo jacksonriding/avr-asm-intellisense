@@ -49,14 +49,16 @@ npm test
 npm run check
 npm run compile
 npm run test:extension
+npm run test:extension:restricted
 npm run test:extension:packaged
 ```
 
 `test:extension` exercises the source checkout in a real Extension Host. The packaged
 variant builds, installs, and activates the generated VSIX in an isolated test profile.
-On headless Linux, install the Xvfb package and prefix either command with
-`xvfb-run -a`. Press `F5` in VS Code to start an interactive Extension Development
-Host.
+The Restricted Mode variant uses a fresh untrusted workspace and verifies that static
+language features remain available without granting project tool execution. On headless
+Linux, install the Xvfb package and prefix Extension Host commands with `xvfb-run -a`.
+Press `F5` in VS Code to start an interactive Extension Development Host.
 
 ## How project settings are resolved
 

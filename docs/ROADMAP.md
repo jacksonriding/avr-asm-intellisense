@@ -33,9 +33,9 @@ coverage claims remain specific and testable.
 ### 0.3.1 — Reliability foundation
 
 Progress: the bounded process runner, cross-platform CI definition, source Extension
-Host smoke suite, and installed-VSIX smoke suite are implemented. Project-context
-extraction, Restricted Mode Extension Host coverage, and parser/workspace latency
-fixtures remain before this milestone closes.
+Host smoke suite, installed-VSIX smoke suite, and Restricted Mode Extension Host coverage
+are implemented. Project-context extraction and parser/workspace latency fixtures remain
+before this milestone closes.
 
 - Add CI for type checking, tests and coverage, audit, packaging, and VSIX smoke
   installation.

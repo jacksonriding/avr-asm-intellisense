@@ -9,6 +9,7 @@
 - Add cross-platform CI for type checks, coverage, audit, packaging, and supported VS Code versions.
 - Add real Extension Host smoke coverage for activation, language associations, completions,
   hover, signature help, commands, and an installed production VSIX.
+- Add deterministic Restricted Mode Extension Host coverage for static language features.
 
 ## 0.3.0
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import * as vscode from "vscode";
@@ -46,7 +47,37 @@ async function waitUntil(
   }
 }
 
+async function assertForbiddenToolNotLaunched(): Promise<void> {
+  const markerPath = process.env.AVR_ASM_FORBIDDEN_TOOL_MARKER;
+  if (markerPath === undefined) {
+    return;
+  }
+
+  try {
+    await access(markerPath);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+  assert.fail("Restricted Mode smoke must not launch project discovery or compiler tools");
+}
+
 export async function runExtensionHostSmoke(): Promise<void> {
+  const expectedWorkspaceTrust = process.env.AVR_ASM_EXPECTED_WORKSPACE_TRUST;
+  if (expectedWorkspaceTrust !== undefined) {
+    assert.ok(
+      expectedWorkspaceTrust === "trusted" || expectedWorkspaceTrust === "restricted",
+      "AVR_ASM_EXPECTED_WORKSPACE_TRUST must be trusted or restricted"
+    );
+    assert.equal(
+      vscode.workspace.isTrusted,
+      expectedWorkspaceTrust === "trusted",
+      `workspace should run in ${expectedWorkspaceTrust} mode`
+    );
+  }
+
   const extension = vscode.extensions.getExtension("local-development.avr-asm-intellisense");
   assert.ok(extension, "AVR Assembly IntelliSense should be available in the Extension Host");
 
@@ -124,4 +155,5 @@ export async function runExtensionHostSmoke(): Promise<void> {
     "the active-context command should be registered"
   );
   await vscode.commands.executeCommand("avrAsmIntellisense.showActiveContext");
+  await assertForbiddenToolNotLaunched();
 }
