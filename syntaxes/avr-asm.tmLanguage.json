@@ -26,7 +26,7 @@
     },
     "labels": {
       "patterns": [
-        { "name": "entity.name.function.label.avr-asm", "match": "^\\s*([A-Za-z_.$][A-Za-z0-9_.$]*):" }
+        { "name": "entity.name.function.label.avr-asm", "match": "^\\s*([A-Za-z_.][A-Za-z0-9_.]*):" }
       ]
     },
     "directives": {

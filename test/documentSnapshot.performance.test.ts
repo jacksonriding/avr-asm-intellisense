@@ -7,6 +7,7 @@ import { localDefinitionTargets, localSymbolHover } from "../src/core/localSymbo
 
 const GROUP_COUNT = 5_000;
 const EXPECTED_DEFINITION_COUNT = GROUP_COUNT * 6;
+const EXPECTED_STATEMENT_COUNT = GROUP_COUNT * 4;
 const LARGE_DOCUMENT = Array.from({ length: GROUP_COUNT }, (_, index) => [
   `global_${index}: .Llocal_${index}: nop`,
   `${index % 10}: rjmp ${index % 10}b`,
@@ -19,14 +20,16 @@ const LARGE_DOCUMENT = Array.from({ length: GROUP_COUNT }, (_, index) => [
 describe("document snapshot latency", () => {
   it("parses a deterministic 30,000-line document within the initial CI budget", () => {
     expect(LARGE_DOCUMENT.length).toBeGreaterThan(1_000_000);
-    expect(createDocumentSnapshot(LARGE_DOCUMENT, 0).definitions)
-      .toHaveLength(EXPECTED_DEFINITION_COUNT);
+    const initial = createDocumentSnapshot(LARGE_DOCUMENT, 0);
+    expect(initial.definitions).toHaveLength(EXPECTED_DEFINITION_COUNT);
+    expect(initial.statements).toHaveLength(EXPECTED_STATEMENT_COUNT);
 
     const durations = Array.from({ length: 5 }, (_, version) => {
       const startedAt = performance.now();
       const snapshot = createDocumentSnapshot(LARGE_DOCUMENT, version);
       const duration = performance.now() - startedAt;
       expect(snapshot.definitions).toHaveLength(EXPECTED_DEFINITION_COUNT);
+      expect(snapshot.statements).toHaveLength(EXPECTED_STATEMENT_COUNT);
       return duration;
     }).sort((left, right) => left - right);
 
@@ -45,6 +48,18 @@ describe("document snapshot latency", () => {
 
     expect(hover?.name).toBe(finalLabel);
     expect(definitions).toHaveLength(1);
+    expect(duration).toBeLessThan(1_500);
+  }, 15_000);
+
+  it("keeps separator-heavy malformed input linear without materializing empty statements", () => {
+    const source = "$".repeat(100_000);
+    const startedAt = performance.now();
+
+    const snapshot = createDocumentSnapshot(source, 0);
+    const duration = performance.now() - startedAt;
+
+    expect(snapshot.statements).toEqual([]);
+    expect(snapshot.definitions).toEqual([]);
     expect(duration).toBeLessThan(1_500);
   }, 15_000);
 });

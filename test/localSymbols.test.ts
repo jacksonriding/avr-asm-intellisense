@@ -232,6 +232,18 @@ describe("local symbol services", () => {
     expect(localDefinitionTargets(snapshot, occurrence(source, ".equ", 2))).toHaveLength(1);
   });
 
+  it("does not resolve operators after dollar statement separators", () => {
+    const source = [
+      "rjmp:",
+      "  nop $ rjmp rjmp"
+    ].join("\n");
+    const snapshot = createDocumentSnapshot(source, 4);
+
+    expect(localSymbolHover(snapshot, occurrence(source, "rjmp", 1))).toBeUndefined();
+    expect(localDefinitionTargets(snapshot, occurrence(source, "rjmp", 1))).toEqual([]);
+    expect(localDefinitionTargets(snapshot, occurrence(source, "rjmp", 2))).toHaveLength(1);
+  });
+
   it("ignores symbol-looking tokens in comments, strings, and preprocessor lines", () => {
     const source = [
       "real:",

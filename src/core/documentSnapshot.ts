@@ -1,3 +1,5 @@
+import { findInstruction } from "./instructions";
+
 export interface TextRange {
   readonly start: number;
   readonly end: number;
@@ -20,11 +22,29 @@ export interface LocalDefinition {
   readonly expressionRange?: TextRange;
 }
 
+export type DocumentStatementKind = "instruction" | "directive" | "macroInvocation";
+
+export interface StatementOperand {
+  readonly text: string;
+  readonly range: TextRange;
+  readonly missing: boolean;
+}
+
+export interface DocumentStatement {
+  readonly kind: DocumentStatementKind;
+  readonly name: string;
+  readonly normalizedName: string;
+  readonly range: TextRange;
+  readonly nameRange: TextRange;
+  readonly operands: readonly StatementOperand[];
+}
+
 export interface DocumentSnapshot {
   readonly version: number;
   readonly source: string;
   readonly lineStarts: readonly number[];
   readonly definitions: readonly LocalDefinition[];
+  readonly statements: readonly DocumentStatement[];
 }
 
 interface SourceLine {
@@ -61,7 +81,6 @@ function isSymbolStart(character: string | undefined): boolean {
     || (character >= "a" && character <= "z")
     || character === "_"
     || character === "."
-    || character === "$"
   );
 }
 
@@ -150,11 +169,12 @@ function maskedComments(source: string): string {
     const next = source[cursor + 1];
     if (character === "\r" || character === "\n") {
       const continuesPreprocessor: boolean = preprocessorLineComment && lineContinues;
+      const continuedQuote = quote !== undefined && escaped ? quote : undefined;
       lineComment = continuesPreprocessor;
       preprocessorLineComment = continuesPreprocessor;
       lineContinues = false;
       lineHasCode = false;
-      quote = undefined;
+      quote = continuedQuote;
       escaped = false;
       if (character === "\r" && next === "\n") {
         cursor += 1;
@@ -222,6 +242,79 @@ function maskedComments(source: string): string {
     }
   }
   return result.join("");
+}
+
+function logicalLines(lines: readonly SourceLine[], masked: string): readonly SourceLine[] {
+  const logical: SourceLine[] = [];
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const first = lines[lineIndex]!;
+    let last = first;
+    while (last.end > last.start
+      && masked[last.end - 1] === "\\"
+      && lineIndex + 1 < lines.length) {
+      lineIndex += 1;
+      last = lines[lineIndex]!;
+    }
+    logical.push(Object.freeze({ start: first.start, end: last.end }));
+  }
+  return Object.freeze(logical);
+}
+
+function matchingDelimiter(opening: string, closing: string): boolean {
+  return (opening === "(" && closing === ")")
+    || (opening === "[" && closing === "]")
+    || (opening === "{" && closing === "}");
+}
+
+function topLevelStatementRanges(masked: string, logicalLine: SourceLine): readonly SourceLine[] {
+  const ranges: SourceLine[] = [];
+  const delimiters: string[] = [];
+  let start = logicalLine.start;
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+
+  for (let cursor = logicalLine.start; cursor < logicalLine.end; cursor += 1) {
+    const character = masked[cursor];
+    if (quote !== undefined) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === "(" || character === "[" || character === "{") {
+      delimiters.push(character);
+    } else if (character === ")" || character === "]" || character === "}") {
+      const opening = delimiters[delimiters.length - 1];
+      if (opening !== undefined && matchingDelimiter(opening, character)) {
+        delimiters.pop();
+      }
+    } else if (character === "$" && delimiters.length === 0) {
+      const rangeStart = skipHorizontalWhitespace(masked, start, cursor);
+      const rangeEnd = trimHorizontalWhitespace(masked, rangeStart, cursor);
+      if (rangeStart < rangeEnd) {
+        ranges.push(Object.freeze({ start: rangeStart, end: rangeEnd }));
+      }
+      start = cursor + 1;
+    }
+  }
+  const rangeStart = skipHorizontalWhitespace(masked, start, logicalLine.end);
+  const rangeEnd = trimHorizontalWhitespace(masked, rangeStart, logicalLine.end);
+  if (rangeStart < rangeEnd) {
+    ranges.push(Object.freeze({ start: rangeStart, end: rangeEnd }));
+  }
+  return Object.freeze(ranges);
+}
+
+function statementRanges(lines: readonly SourceLine[], masked: string): readonly SourceLine[] {
+  return Object.freeze(logicalLines(lines, masked).flatMap(
+    (line) => topLevelStatementRanges(masked, line)
+  ));
 }
 
 function expressionHasTerminatedStrings(source: string, start: number, end: number): boolean {
@@ -358,6 +451,169 @@ function parseDefinitionsOnLine(
   return Object.freeze(definitions);
 }
 
+function skipOperandTrivia(source: string, start: number, end: number): number {
+  let cursor = skipHorizontalWhitespace(source, start, end);
+  while (cursor < end && source[cursor] === "\\") {
+    const next = source[cursor + 1];
+    const afterNewline = next === "\n"
+      ? cursor + 2
+      : (next === "\r"
+        ? (source[cursor + 2] === "\n" ? cursor + 3 : cursor + 2)
+        : undefined);
+    if (afterNewline === undefined) {
+      break;
+    }
+    cursor = skipHorizontalWhitespace(source, afterNewline, end);
+  }
+  return cursor;
+}
+
+function frozenOperand(
+  source: string,
+  start: number,
+  end: number
+): StatementOperand {
+  const trimmedStart = skipOperandTrivia(source, start, end);
+  const trimmedEnd = trimHorizontalWhitespace(source, trimmedStart, end);
+  const missing = trimmedStart >= trimmedEnd;
+  const range = missing
+    ? frozenRange(end, end)
+    : frozenRange(trimmedStart, trimmedEnd);
+  return Object.freeze({
+    text: missing ? "" : source.slice(range.start, range.end),
+    range,
+    missing
+  });
+}
+
+function splitStatementOperands(
+  source: string,
+  masked: string,
+  start: number,
+  end: number,
+  splitWhitespace: boolean
+): readonly StatementOperand[] {
+  const operandStart = skipOperandTrivia(source, start, end);
+  if (operandStart >= end) {
+    return Object.freeze([]);
+  }
+
+  const operands: StatementOperand[] = [];
+  const delimiters: string[] = [];
+  let segmentStart = operandStart;
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+
+  for (let cursor = operandStart; cursor < end; cursor += 1) {
+    const character = masked[cursor];
+    if (quote !== undefined) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (source[cursor] === "/" && source[cursor + 1] === "*" && character === " ") {
+      const commentEnd = source.indexOf("*/", cursor + 2);
+      cursor = commentEnd < 0 || commentEnd >= end ? end - 1 : commentEnd + 1;
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === "(" || character === "[" || character === "{") {
+      delimiters.push(character);
+    } else if (character === ")" || character === "]" || character === "}") {
+      const opening = delimiters[delimiters.length - 1];
+      if (opening !== undefined && matchingDelimiter(opening, character)) {
+        delimiters.pop();
+      }
+    } else if (character === "," && delimiters.length === 0) {
+      operands.push(frozenOperand(source, segmentStart, cursor));
+      segmentStart = cursor + 1;
+    } else if (splitWhitespace
+      && delimiters.length === 0
+      && isHorizontalWhitespace(source[cursor])) {
+      const nextToken = skipHorizontalWhitespace(source, cursor + 1, end);
+      if (masked[nextToken] === ",") {
+        cursor = nextToken - 1;
+        continue;
+      }
+      const operand = frozenOperand(source, segmentStart, cursor);
+      if (!operand.missing) {
+        operands.push(operand);
+      }
+      segmentStart = nextToken;
+      cursor = segmentStart - 1;
+    }
+  }
+
+  const finalOperand = frozenOperand(source, segmentStart, end);
+  if (!finalOperand.missing || operands.length > 0 || segmentStart > operandStart) {
+    operands.push(finalOperand);
+  }
+  return Object.freeze(operands);
+}
+
+function parseStatementOnLine(
+  source: string,
+  masked: string,
+  line: SourceLine
+): DocumentStatement | undefined {
+  const codeStart = skipHorizontalWhitespace(masked, line.start, line.end);
+  const codeEnd = trimHorizontalWhitespace(masked, codeStart, line.end);
+  if (codeStart >= codeEnd) {
+    return undefined;
+  }
+  let cursor = codeStart;
+  while (cursor < codeEnd) {
+    const symbolStart = skipHorizontalWhitespace(masked, cursor, codeEnd);
+    const symbol = parseLabelSymbol(masked, symbolStart, codeEnd);
+    if (symbol === undefined) {
+      break;
+    }
+    const colon = skipHorizontalWhitespace(masked, symbol.end, codeEnd);
+    if (masked[colon] !== ":") {
+      break;
+    }
+    cursor = colon + 1;
+  }
+
+  const nameStart = skipHorizontalWhitespace(masked, cursor, codeEnd);
+  const symbol = parseNamedSymbol(masked, nameStart, codeEnd);
+  if (symbol === undefined) {
+    return undefined;
+  }
+  const afterName = skipHorizontalWhitespace(masked, symbol.end, codeEnd);
+  if (masked[afterName] === "=" && masked[afterName + 1] !== "=") {
+    return undefined;
+  }
+
+  const name = source.slice(symbol.start, symbol.end);
+  const instruction = findInstruction(name);
+  const kind: DocumentStatementKind = instruction !== undefined
+    ? "instruction"
+    : (name.startsWith(".") ? "directive" : "macroInvocation");
+  const normalizedName = instruction?.mnemonic
+    ?? (kind === "directive" ? name.toLowerCase() : name);
+  return Object.freeze({
+    kind,
+    name,
+    normalizedName,
+    range: frozenRange(codeStart, codeEnd),
+    nameRange: frozenRange(symbol.start, symbol.end),
+    operands: splitStatementOperands(
+      source,
+      masked,
+      symbol.end,
+      codeEnd,
+      kind === "macroInvocation"
+    )
+  });
+}
+
 export function createDocumentSnapshot(source: string, version: number): DocumentSnapshot {
   if (!Number.isSafeInteger(version) || version < 0) {
     throw new Error("Document version must be a non-negative integer.");
@@ -367,12 +623,18 @@ export function createDocumentSnapshot(source: string, version: number): Documen
   }
   const lines = physicalLines(source);
   const masked = maskedComments(source);
-  const definitions = lines.flatMap((line) => parseDefinitionsOnLine(source, masked, line));
+  const ranges = statementRanges(lines, masked);
+  const definitions = ranges.flatMap((line) => parseDefinitionsOnLine(source, masked, line));
+  const statements = ranges.flatMap((line) => {
+    const statement = parseStatementOnLine(source, masked, line);
+    return statement === undefined ? [] : [statement];
+  });
   return Object.freeze({
     version,
     source,
     lineStarts: Object.freeze(lines.map(({ start }) => start)),
-    definitions: Object.freeze(definitions)
+    definitions: Object.freeze(definitions),
+    statements: Object.freeze(statements)
   });
 }
 

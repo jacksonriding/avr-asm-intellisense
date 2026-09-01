@@ -73,7 +73,6 @@ function isSymbolStart(character: string | undefined): boolean {
     || (character >= "a" && character <= "z")
     || character === "_"
     || character === "."
-    || character === "$"
   );
 }
 
@@ -233,56 +232,16 @@ function exactOccurrenceDefinition(
   ));
 }
 
-function skipHorizontalWhitespace(source: string, start: number): number {
-  let cursor = start;
-  while (cursor < source.length && isHorizontalWhitespace(source[cursor])) {
-    cursor += 1;
-  }
-  return cursor;
-}
-
-function symbolEnd(source: string, start: number): number | undefined {
-  if (isSymbolStart(source[start])) {
-    let cursor = start + 1;
-    while (cursor < source.length && isSymbolContinuation(source[cursor])) {
-      cursor += 1;
-    }
-    return cursor;
-  }
-  if (isDigit(source[start])) {
-    let cursor = start + 1;
-    while (cursor < source.length && isDigit(source[cursor])) {
-      cursor += 1;
-    }
-    return cursor;
-  }
-  return undefined;
-}
-
 function isStatementOperator(
   snapshot: DocumentSnapshot,
-  token: SourceToken,
-  masked: string
+  token: SourceToken
 ): boolean {
   if (exactOccurrenceDefinition(snapshot.definitions, token) !== undefined) {
     return false;
   }
-  const lineFeed = masked.lastIndexOf("\n", Math.max(0, token.start - 1));
-  const carriageReturn = masked.lastIndexOf("\r", Math.max(0, token.start - 1));
-  let cursor = Math.max(lineFeed, carriageReturn) + 1;
-  while (cursor <= token.start) {
-    const candidateStart = skipHorizontalWhitespace(masked, cursor);
-    const candidateEnd = symbolEnd(masked, candidateStart);
-    if (candidateEnd === undefined) {
-      return false;
-    }
-    const separator = skipHorizontalWhitespace(masked, candidateEnd);
-    if (masked[separator] !== ":") {
-      return candidateStart === token.start;
-    }
-    cursor = separator + 1;
-  }
-  return false;
+  return snapshot.statements.some(({ nameRange }) => (
+    nameRange.start === token.start && nameRange.end === token.end
+  ));
 }
 
 function directionalDefinition(
@@ -427,7 +386,7 @@ export function localSymbolHover(
   if (token === undefined) {
     return undefined;
   }
-  if (isStatementOperator(snapshot, token, masked)) {
+  if (isStatementOperator(snapshot, token)) {
     return undefined;
   }
   const definition = token.direction !== undefined || isDigit(token.text[0])
@@ -470,7 +429,7 @@ export function localDefinitionTargets(
   if (token === undefined) {
     return Object.freeze([]);
   }
-  if (isStatementOperator(snapshot, token, masked)) {
+  if (isStatementOperator(snapshot, token)) {
     return Object.freeze([]);
   }
   if (token.direction !== undefined) {

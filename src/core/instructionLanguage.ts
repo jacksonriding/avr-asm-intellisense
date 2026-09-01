@@ -40,7 +40,7 @@ interface Invocation {
   readonly codeEnd: number;
 }
 
-const INVOCATION_PATTERN = /^\s*(?:(?:[A-Za-z_.$][A-Za-z0-9_.$]*|[0-9]+):\s*)*([A-Za-z]+)\b/u;
+const INVOCATION_PATTERN = /^\s*(?:(?:[A-Za-z_.][A-Za-z0-9_.]*|[0-9]+):\s*)*([A-Za-z]+)\b/u;
 
 function findCommentStart(line: string): number {
   let quote: "\"" | "'" | undefined;

@@ -16,6 +16,8 @@
   analysis for labels, GNU symbol directives, assignments, comments, and incomplete input.
 - Add toolchain-independent local-symbol completion, document symbols, hover, and
   same-file go-to-definition, including directional numeric labels.
+- Add immutable, source-preserving statement and operand analysis for instructions,
+  directives, and macro-shaped invocations, including continuations and AVR `$` separators.
 - Add a deterministic 30,000-line parser latency fixture and parser-specific 90% coverage gates.
 
 ## 0.3.0

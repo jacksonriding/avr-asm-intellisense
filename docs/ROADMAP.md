@@ -56,7 +56,9 @@ Progress: the first editor-neutral document snapshot is immutable and source-pre
 with tolerant local definition analysis for named/local/numeric labels, `.equ`, `.equiv`,
 `.set`, assignments, comments, malformed input, and duplicates. Local completion, document
 symbols, symbol hover, and same-file definition navigation are implemented, including
-directional numeric-label references. Full statement and expression modeling remain.
+directional numeric-label references. The snapshot now models instruction, directive,
+and macro-shaped invocation statements with source-preserving operand slots, logical
+continuations, and same-line separators. Expression and block-construct modeling remain.
 
 - Build a tolerant, source-preserving GNU AVR lexer, parser, expression model, and
   immutable document snapshot.
