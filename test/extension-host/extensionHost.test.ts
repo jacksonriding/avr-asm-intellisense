@@ -113,7 +113,7 @@ export async function runExtensionHostSmoke(): Promise<void> {
     new vscode.Position(0, 0)
   );
   const completionLabels = new Set(completions.items.map(completionLabel));
-  for (const expected of ["LDI", "r16", ".section"]) {
+  for (const expected of ["LDI", "r16", ".section", "LIMIT", "loop"]) {
     assert.ok(
       completionLabels.has(expected),
       `${expected} should be available without a configured toolchain`
@@ -148,6 +148,41 @@ export async function runExtensionHostSmoke(): Promise<void> {
     "LDI signature should describe both operands"
   );
   assert.equal(signature.activeParameter, 1, "the immediate operand should be active after the comma");
+
+  const documentSymbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+    "vscode.executeDocumentSymbolProvider",
+    document.uri
+  );
+  assert.ok(
+    documentSymbols.some(({ name }) => name === "LIMIT"),
+    "GNU constants should be available in the document outline"
+  );
+  assert.ok(
+    documentSymbols.some(({ name }) => name === "loop"),
+    "labels should be available in the document outline"
+  );
+
+  const symbolHovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+    "vscode.executeHoverProvider",
+    document.uri,
+    new vscode.Position(3, 11)
+  );
+  assert.ok(
+    symbolHovers.some((hover) => hoverText(hover).includes("LIMIT")),
+    "local constants should have hover information"
+  );
+
+  const definitions = await vscode.commands.executeCommand<vscode.Location[]>(
+    "vscode.executeDefinitionProvider",
+    document.uri,
+    new vscode.Position(4, 7)
+  );
+  assert.ok(
+    definitions.some((location) => location.uri.toString() === document.uri.toString()
+      && location.range.start.line === 2
+      && location.range.start.character === 0),
+    "local label references should navigate to their definition"
+  );
 
   const commands = await vscode.commands.getCommands(true);
   assert.ok(

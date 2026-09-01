@@ -132,7 +132,9 @@ vi.mock("vscode", () => {
       ) => {
         mocks.registeredSignatureProvider = provider;
         return disposable();
-      }
+      },
+      registerDocumentSymbolProvider: () => disposable(),
+      registerDefinitionProvider: () => disposable()
     },
     window: {
       activeTextEditor: {
@@ -325,15 +327,15 @@ describe("extension integration", () => {
     expect(mocks.runPreprocessor).not.toHaveBeenCalled();
   });
 
-  it("passes generic QUTy metadata into trusted AVR preprocessing", async () => {
+  it("passes generic PlatformIO AVR metadata into trusted AVR preprocessing", async () => {
     mocks.trusted = true;
     mocks.settings = { usePlatformioMetadata: true };
-    mocks.readFile.mockResolvedValue(Buffer.from("[env:QUTy]\nplatform = quty\nboard = QUTy\n"));
+    mocks.readFile.mockResolvedValue(Buffer.from("[env:customDx]\nplatform = atmelavr\nboard_build.mcu = avr128db48\n"));
     mocks.runMetadata.mockResolvedValue([{
-      environmentName: "QUTy",
+      environmentName: "customDx",
       compilerPath: "/pio/avr-gcc",
-      mcu: "attiny1626",
-      defines: ["__AVR_DEV_LIB_NAME__=tn1626"],
+      mcu: "avr128db48",
+      defines: ["F_CPU=24000000UL"],
       includePaths: ["/pio/avr/include"]
     }]);
     mocks.runPreprocessor.mockResolvedValue([
@@ -352,8 +354,8 @@ describe("extension integration", () => {
     }));
     expect(mocks.runPreprocessor).toHaveBeenCalledWith(expect.objectContaining({
       compilerPath: "/pio/avr-gcc",
-      mcu: "attiny1626",
-      defines: ["__AVR_DEV_LIB_NAME__=tn1626"],
+      mcu: "avr128db48",
+      defines: ["F_CPU=24000000UL"],
       includePaths: ["/pio/avr/include"]
     }));
     expect(completions?.some(({ label }) => label === "PORTB_OUTTGL")).toBe(true);

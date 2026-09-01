@@ -14,6 +14,8 @@
   shared cancellation, and stale-result rejection.
 - Add immutable, source-preserving document snapshots with tolerant local definition
   analysis for labels, GNU symbol directives, assignments, comments, and incomplete input.
+- Add toolchain-independent local-symbol completion, document symbols, hover, and
+  same-file go-to-definition, including directional numeric labels.
 - Add a deterministic 30,000-line parser latency fixture and parser-specific 90% coverage gates.
 
 ## 0.3.0
@@ -40,7 +42,7 @@
 - Support current array-based and legacy string-based PlatformIO compiler flags.
 - Forward validated MCU, macro definitions, and include paths to AVR preprocessing.
 - Add automatic PlatformIO executable discovery and bounded metadata caching.
-- Add QUTy-shaped compatibility tests without board-specific production logic.
+- Add modern AVR compatibility tests without board-specific production logic.
 
 ## 0.0.1
 

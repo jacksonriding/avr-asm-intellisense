@@ -16,10 +16,10 @@ const compileCommand = {
 } as const;
 
 const platformio = {
-  environmentName: "QUTy",
+  environmentName: "customDx",
   compilerPath: "/pio/avr-gcc",
-  mcu: "attiny1626",
-  defines: ["__AVR_DEV_LIB_NAME__=tn1626"],
+  mcu: "avr128db48",
+  defines: ["F_CPU=24000000UL"],
   includePaths: ["/pio/avr/include"]
 } as const;
 
@@ -63,11 +63,11 @@ describe("resolveCompilationContext", () => {
       dialect: "gnu-avr",
       source: "platformio",
       compilerPath: "/pio/avr-gcc",
-      mcu: "attiny1626",
-      defines: ["__AVR_DEV_LIB_NAME__=tn1626"],
+      mcu: "avr128db48",
+      defines: ["F_CPU=24000000UL"],
       undefines: [],
       includePaths: ["/pio/avr/include"],
-      environmentName: "QUTy"
+      environmentName: "customDx"
     });
     expect(resolveCompilationContext({ iniMcu: "attiny85" })).toEqual({
       dialect: "gnu-avr",

@@ -9,6 +9,7 @@ The extension provides:
 - Completions for all 119 unique mnemonics in Microchip's AVR instruction manual
 - Hover documentation with forms, operands, cycle counts, SREG effects, aliases, and availability
 - Signature help that follows the active operand and distinguishes pointer-form overloads
+- Local completion, outline symbols, hover, and go-to-definition for labels and GNU constants
 - AVR instruction, register, and GNU assembler directive syntax highlighting
 - MCU-specific macro completions extracted from `<avr/io.h>` by `avr-gcc -E -dM`
 - Per-file compiler, MCU, define, undefine, and include discovery from `compile_commands.json`
@@ -130,13 +131,6 @@ The extension remains usable without PlatformIO. Set the MCU and compiler manual
 ```
 
 Static instruction, register, and directive completions do not require any toolchain.
-
-## QUTy compatibility
-
-The metadata integration is tested with a QUTy-shaped PlatformIO environment. It discovers
-the ATtiny1626 MCU, PlatformIO-managed AVR compiler, include paths, and the
-`__AVR_DEV_LIB_NAME__=tn1626` definition required by the QUTy platform. QUTy identifiers
-are fixtures only; production code contains no QUTy-specific branch.
 
 PlatformIO metadata can execute project build scripts, so project discovery and compiler
 processes run only for trusted local workspaces. Compilation database commands are parsed

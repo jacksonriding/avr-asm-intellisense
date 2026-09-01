@@ -19,6 +19,7 @@ import {
 import { runAvrPreprocessor } from "./core/preprocessor";
 import type { AvrMacro, CompletionKind } from "./core/types";
 import { registerInstructionProviders } from "./vscode/instructionProviders";
+import { registerLocalSymbolProviders } from "./vscode/localSymbolProviders";
 
 interface SymbolCache {
   readonly key: string;
@@ -180,6 +181,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const localSymbolProviders = registerLocalSymbolProviders();
   const provider = vscode.languages.registerCompletionItemProvider("avr-asm", {
     async provideCompletionItems(document, _position, cancellationToken): Promise<vscode.CompletionItem[]> {
       let macros: readonly AvrMacro[] = [];
@@ -229,6 +231,7 @@ export function activate(context: vscode.ExtensionContext): void {
         projectContexts.dispose();
       }
     },
+    ...localSymbolProviders,
     ...instructionProviders
   );
 }

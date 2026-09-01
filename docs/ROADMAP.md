@@ -54,8 +54,9 @@ has at least 90% line coverage.
 
 Progress: the first editor-neutral document snapshot is immutable and source-preserving,
 with tolerant local definition analysis for named/local/numeric labels, `.equ`, `.equiv`,
-`.set`, assignments, comments, malformed input, and duplicates. Full statement and
-expression modeling plus editor providers remain.
+`.set`, assignments, comments, malformed input, and duplicates. Local completion, document
+symbols, symbol hover, and same-file definition navigation are implemented, including
+directional numeric-label references. Full statement and expression modeling remain.
 
 - Build a tolerant, source-preserving GNU AVR lexer, parser, expression model, and
   immutable document snapshot.
@@ -100,7 +101,7 @@ not produce speculative errors, and critical editor flows pass Extension Host te
 - Generate reproducible profiles from supported toolchains or installed Microchip
   device packs, recording provenance and respecting redistribution licences.
 - Test representative classic ATmega/ATtiny, reduced-core, XMEGA, modern
-  tiny/mega, AVR Dx/EA-class, and ATtiny1626/QUTy-shaped targets.
+  tiny/mega, and AVR Dx/EA-class targets across supported project models.
 
 Exit: the published device matrix is generated and validated, target contexts never
 mix, and device diagnostics agree with supported reference toolchains.

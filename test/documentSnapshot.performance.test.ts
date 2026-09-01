@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 
 import { createDocumentSnapshot } from "../src/core/documentSnapshot";
+import { localDefinitionTargets, localSymbolHover } from "../src/core/localSymbols";
 
 const GROUP_COUNT = 5_000;
 const EXPECTED_DEFINITION_COUNT = GROUP_COUNT * 6;
@@ -30,5 +31,20 @@ describe("document snapshot latency", () => {
     }).sort((left, right) => left - right);
 
     expect(durations[2]).toBeLessThan(1_500);
+  }, 15_000);
+
+  it("answers local hover and definition queries near the end of a large document", () => {
+    const snapshot = createDocumentSnapshot(LARGE_DOCUMENT, 0);
+    const finalLabel = `global_${GROUP_COUNT - 1}`;
+    const offset = LARGE_DOCUMENT.lastIndexOf(finalLabel) + 1;
+    const startedAt = performance.now();
+
+    const hover = localSymbolHover(snapshot, offset);
+    const definitions = localDefinitionTargets(snapshot, offset);
+    const duration = performance.now() - startedAt;
+
+    expect(hover?.name).toBe(finalLabel);
+    expect(definitions).toHaveLength(1);
+    expect(duration).toBeLessThan(1_500);
   }, 15_000);
 });

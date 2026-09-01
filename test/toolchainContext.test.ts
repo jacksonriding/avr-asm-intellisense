@@ -3,19 +3,19 @@ import { describe, expect, it } from "vitest";
 import { resolveAvrToolchain } from "../src/core/toolchainContext";
 
 const metadata = {
-  environmentName: "QUTy",
+  environmentName: "customDx",
   compilerPath: "/pio/avr-gcc",
-  mcu: "attiny1626",
-  defines: ["__AVR_DEV_LIB_NAME__=tn1626"],
+  mcu: "avr128db48",
+  defines: ["F_CPU=24000000UL"],
   includePaths: ["/pio/avr/include"]
 } as const;
 
 describe("resolveAvrToolchain", () => {
-  it("resolves QUTy entirely from generic PlatformIO metadata", () => {
+  it("resolves toolchains entirely from generic PlatformIO metadata", () => {
     expect(resolveAvrToolchain({ metadata })).toEqual({
       compilerPath: "/pio/avr-gcc",
-      mcu: "attiny1626",
-      defines: ["__AVR_DEV_LIB_NAME__=tn1626"],
+      mcu: "avr128db48",
+      defines: ["F_CPU=24000000UL"],
       includePaths: ["/pio/avr/include"]
     });
   });

@@ -49,6 +49,20 @@ const qutyMetadata = JSON.stringify({
   }
 });
 
+const customAvrMetadata = JSON.stringify({
+  customDx: {
+    env_name: "customDx",
+    cc_path: "/pio/packages/toolchain-atmelavr/bin/avr-gcc",
+    cc_flags: ["-Os", "-mmcu=avr128db48", "-DF_CPU=24000000UL"],
+    defines: ["PLATFORMIO=60119"],
+    includes: {
+      project: ["/project/include"],
+      generated: ["/project/.pio/build/customDx/generated"],
+      toolchain: ["/pio/packages/toolchain-atmelavr/avr/include"]
+    }
+  }
+});
+
 describe("parsePlatformioMetadata", () => {
   it("normalizes QUTy through generic AVR metadata", () => {
     const contexts = parsePlatformioMetadata(qutyMetadata);
@@ -66,6 +80,20 @@ describe("parsePlatformioMetadata", () => {
     }]);
     expect(Object.isFrozen(contexts)).toBe(true);
     expect(Object.isFrozen(contexts[0]?.defines)).toBe(true);
+  });
+
+  it("normalizes custom AVR environments without board-specific branches", () => {
+    expect(parsePlatformioMetadata(customAvrMetadata)).toEqual([{
+      environmentName: "customDx",
+      compilerPath: "/pio/packages/toolchain-atmelavr/bin/avr-gcc",
+      mcu: "avr128db48",
+      defines: ["PLATFORMIO=60119", "F_CPU=24000000UL"],
+      includePaths: [
+        "/project/include",
+        "/project/.pio/build/customDx/generated",
+        "/pio/packages/toolchain-atmelavr/avr/include"
+      ]
+    }]);
   });
 
   it("ignores unusable environments and rejects malformed JSON", () => {
