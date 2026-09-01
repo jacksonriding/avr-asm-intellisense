@@ -12,7 +12,13 @@ export default defineConfig({
         lines: 80,
         functions: 80,
         branches: 80,
-        statements: 80
+        statements: 80,
+        "src/core/documentSnapshot.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90
+        }
       }
     }
   }

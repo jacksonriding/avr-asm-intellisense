@@ -12,6 +12,9 @@
 - Add deterministic Restricted Mode Extension Host coverage for static language features.
 - Extract project-context discovery into an editor-neutral service with bounded caches,
   shared cancellation, and stale-result rejection.
+- Add immutable, source-preserving document snapshots with tolerant local definition
+  analysis for labels, GNU symbol directives, assignments, comments, and incomplete input.
+- Add a deterministic 30,000-line parser latency fixture and parser-specific 90% coverage gates.
 
 ## 0.3.0
 

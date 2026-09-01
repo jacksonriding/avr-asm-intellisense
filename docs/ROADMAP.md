@@ -35,7 +35,8 @@ coverage claims remain specific and testable.
 Progress: the bounded process runner, cross-platform CI definition, source Extension
 Host smoke suite, installed-VSIX smoke suite, and Restricted Mode Extension Host coverage
 are implemented. Project-context discovery and caching are now editor-neutral and reject
-stale results. Parser/workspace latency fixtures remain before this milestone closes.
+stale results. A 30,000-line parser latency fixture is implemented; the workspace-index
+latency fixture remains before this milestone closes.
 
 - Add CI for type checking, tests and coverage, audit, packaging, and VSIX smoke
   installation.
@@ -50,6 +51,11 @@ overall line coverage remains at least 80%, and new process/security-critical co
 has at least 90% line coverage.
 
 ### 0.4.0 — Full-document language model
+
+Progress: the first editor-neutral document snapshot is immutable and source-preserving,
+with tolerant local definition analysis for named/local/numeric labels, `.equ`, `.equiv`,
+`.set`, assignments, comments, malformed input, and duplicates. Full statement and
+expression modeling plus editor providers remain.
 
 - Build a tolerant, source-preserving GNU AVR lexer, parser, expression model, and
   immutable document snapshot.
