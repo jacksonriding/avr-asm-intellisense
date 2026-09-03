@@ -18,6 +18,12 @@ export default defineConfig({
           functions: 90,
           branches: 90,
           statements: 90
+        },
+        "src/core/expressions.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90
         }
       }
     }

@@ -18,6 +18,8 @@
   same-file go-to-definition, including directional numeric labels.
 - Add immutable, source-preserving statement and operand analysis for instructions,
   directives, and macro-shaped invocations, including continuations and AVR `$` separators.
+- Add immutable structural GNU AVR expression trees with assembler-specific precedence,
+  relocatable-address modifiers, absolute source ranges, and bounded malformed-input recovery.
 - Add a deterministic 30,000-line parser latency fixture and parser-specific 90% coverage gates.
 
 ## 0.3.0

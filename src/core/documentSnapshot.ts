@@ -1,4 +1,5 @@
 import { findInstruction } from "./instructions";
+import { parseExpression, type ParsedExpression } from "./expressions";
 
 export interface TextRange {
   readonly start: number;
@@ -20,6 +21,7 @@ export interface LocalDefinition {
   readonly nameRange: TextRange;
   readonly statementRange: TextRange;
   readonly expressionRange?: TextRange;
+  readonly expression?: ParsedExpression;
 }
 
 export type DocumentStatementKind = "instruction" | "directive" | "macroInvocation";
@@ -28,6 +30,7 @@ export interface StatementOperand {
   readonly text: string;
   readonly range: TextRange;
   readonly missing: boolean;
+  readonly expression?: ParsedExpression;
 }
 
 export interface DocumentStatement {
@@ -340,6 +343,7 @@ function expressionHasTerminatedStrings(source: string, start: number, end: numb
 }
 
 function frozenDefinition(
+  source: string,
   name: string,
   kind: LocalDefinitionKind,
   nameStart: number,
@@ -352,7 +356,10 @@ function frozenDefinition(
     kind,
     nameRange: frozenRange(nameStart, nameEnd),
     statementRange,
-    ...(expressionRange === undefined ? {} : { expressionRange })
+    ...(expressionRange === undefined ? {} : {
+      expressionRange,
+      expression: parseExpression(source, expressionRange)
+    })
   });
 }
 
@@ -389,6 +396,7 @@ function parseDefinitionsOnLine(
     }
     const name = source.slice(symbol.start, symbol.end);
     definitions.push(frozenDefinition(
+      source,
       name,
       labelKind(name),
       symbol.start,
@@ -421,6 +429,7 @@ function parseDefinitionsOnLine(
       return Object.freeze(definitions);
     }
     definitions.push(frozenDefinition(
+      source,
       source.slice(name.start, name.end),
       definitionKind,
       name.start,
@@ -441,6 +450,7 @@ function parseDefinitionsOnLine(
     return Object.freeze(definitions);
   }
   definitions.push(frozenDefinition(
+    source,
     source.slice(bodySymbol.start, bodySymbol.end),
     "assignment",
     bodySymbol.start,
@@ -482,7 +492,8 @@ function frozenOperand(
   return Object.freeze({
     text: missing ? "" : source.slice(range.start, range.end),
     range,
-    missing
+    missing,
+    ...(missing ? {} : { expression: parseExpression(source, range) })
   });
 }
 

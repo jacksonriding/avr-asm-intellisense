@@ -142,7 +142,7 @@ describe("document snapshots", () => {
     const source = ".byte , one,, three,";
     const statement = createDocumentSnapshot(source, 0).statements[0]!;
 
-    expect(statement.operands).toEqual([
+    expect(statement.operands.map(({ text, range, missing }) => ({ text, range, missing }))).toEqual([
       { text: "", range: { start: 6, end: 6 }, missing: true },
       { text: "one", range: { start: 8, end: 11 }, missing: false },
       { text: "", range: { start: 12, end: 12 }, missing: true },
@@ -217,6 +217,38 @@ describe("document snapshots", () => {
     expect(label.statementRange).toEqual(snapshot.statements[1]!.range);
     expect(statementSource(source, snapshot.statements[1]!))
       .toBe("label: ldi r16, \\\n  1");
+  });
+
+  it("attaches source-preserving expressions to definition RHSs and non-missing operands", () => {
+    const source = [
+      ".equ VALUE, target /* gap */ + \\",
+      "  0x2A",
+      "ldi r16, lo8(-(table + 2))"
+    ].join("\r\n");
+    const snapshot = createDocumentSnapshot(source, 0);
+    const definition = snapshot.definitions[0]!;
+    const instruction = snapshot.statements[1]!;
+
+    expect(definition.expression?.root).toMatchObject({
+      kind: "binary",
+      operator: "+",
+      left: { kind: "symbol", name: "target" },
+      right: { kind: "integer", text: "0x2A" }
+    });
+    expect(definition.expression?.range).toEqual(definition.expressionRange);
+    expect(instruction.operands[0]?.expression?.root).toMatchObject({
+      kind: "symbol", name: "r16"
+    });
+    expect(instruction.operands[1]?.expression?.root).toMatchObject({
+      kind: "avrModifier",
+      normalizedName: "lo8",
+      argument: { kind: "unary", operator: "-" }
+    });
+    expect(instruction.operands.every(({ expression }) => expression !== undefined)).toBe(true);
+
+    const missing = createDocumentSnapshot(".byte ,1", 0).statements[0]!.operands[0]!;
+    expect(missing.missing).toBe(true);
+    expect(missing.expression).toBeUndefined();
   });
 
   it("ignores comment-only, string-only, CPP, label-only, and assignment-only lines", () => {
