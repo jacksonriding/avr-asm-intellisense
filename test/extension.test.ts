@@ -67,6 +67,15 @@ vi.mock("vscode", () => {
     constructor(readonly contents: MarkdownString, readonly range: Range) {}
   }
 
+  class Diagnostic {
+    source?: string;
+    constructor(
+      readonly range: Range,
+      readonly message: string,
+      readonly severity: number
+    ) {}
+  }
+
   class ParameterInformation {
     constructor(readonly label: string, readonly documentation?: string) {}
   }
@@ -93,6 +102,13 @@ vi.mock("vscode", () => {
   return {
     CompletionItem,
     CompletionItemKind: { Keyword: 1, Variable: 2, Constant: 3 },
+    Diagnostic,
+    DiagnosticSeverity: {
+      Error: 0,
+      Warning: 1,
+      Information: 2,
+      Hint: 3
+    },
     Hover,
     MarkdownString,
     ParameterInformation,
@@ -119,6 +135,12 @@ vi.mock("vscode", () => {
     },
     languages: {
       registerWorkspaceSymbolProvider: () => disposable(),
+      createDiagnosticCollection: () => ({
+        set: vi.fn(),
+        delete: vi.fn(),
+        clear: vi.fn(),
+        dispose: vi.fn()
+      }),
       registerCompletionItemProvider: (_language: string, provider: typeof mocks.registeredProvider) => {
         mocks.registeredProvider = provider;
         return disposable();
@@ -159,6 +181,16 @@ vi.mock("vscode", () => {
     },
     workspace: {
       get isTrusted() { return mocks.trusted; },
+      textDocuments: [{
+        languageId: "avr-asm",
+        uri: {
+          scheme: "file",
+          fsPath: "/workspace/src/main.S",
+          toString: () => "file:///workspace/src/main.S"
+        },
+        version: 1,
+        getText: () => documentForMock.getText()
+      }],
       fs: { readFile: mocks.readFile },
       getConfiguration: (section: string) => ({
         get: (key: string, fallback: unknown) => section === "platformio-ide"
@@ -166,6 +198,9 @@ vi.mock("vscode", () => {
           : (mocks.settings[key] ?? fallback)
       }),
       getWorkspaceFolder: () => ({ uri: workspaceUri }),
+      onDidOpenTextDocument: () => disposable(),
+      onDidChangeTextDocument: () => disposable(),
+      onDidCloseTextDocument: () => disposable(),
       onDidChangeConfiguration: () => disposable(),
       createFileSystemWatcher: () => ({
         ...disposable(),
