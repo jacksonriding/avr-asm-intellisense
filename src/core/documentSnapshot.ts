@@ -24,7 +24,13 @@ export interface LocalDefinition {
   readonly expression?: ParsedExpression;
 }
 
-export type DocumentStatementKind = "instruction" | "directive" | "macroInvocation";
+export type DocumentStatementKind =
+  | "instruction"
+  | "directive"
+  | "directiveBlockElse"
+  | "directiveBlockEnd"
+  | "directiveBlockStart"
+  | "macroInvocation";
 
 export interface StatementOperand {
   readonly text: string;
@@ -65,12 +71,34 @@ function frozenRange(start: number, end: number): TextRange {
   return Object.freeze({ start, end });
 }
 
-function directiveKind(name: string): LocalDefinitionKind | undefined {
+function definitionDirectiveKind(name: string): LocalDefinitionKind | undefined {
   switch (name) {
     case ".equ": return "equ";
     case ".equiv": return "equiv";
     case ".set": return "set";
     default: return undefined;
+  }
+}
+
+function directiveStatementKind(name: string): DocumentStatementKind | undefined {
+  switch (name) {
+    case ".macro":
+    case ".rept":
+    case ".irp":
+    case ".irpc":
+    case ".if":
+    case ".ifdef":
+    case ".ifndef":
+      return "directiveBlockStart";
+    case ".else":
+    case ".elif":
+      return "directiveBlockElse";
+    case ".endm":
+    case ".endr":
+    case ".endif":
+      return "directiveBlockEnd";
+    default:
+      return undefined;
   }
 }
 
@@ -412,7 +440,7 @@ function parseDefinitionsOnLine(
     return Object.freeze(definitions);
   }
   const normalizedBody = bodySymbol.name.toLowerCase();
-  const definitionKind = directiveKind(normalizedBody);
+  const definitionKind = definitionDirectiveKind(normalizedBody);
   if (definitionKind !== undefined) {
     const nameStart = skipHorizontalWhitespace(masked, bodySymbol.end, codeEnd);
     const name = parseNamedSymbol(masked, nameStart, codeEnd);
@@ -604,11 +632,12 @@ function parseStatementOnLine(
 
   const name = source.slice(symbol.start, symbol.end);
   const instruction = findInstruction(name);
+  const isDirective = name.startsWith(".");
+  const normalizedName = instruction?.mnemonic ?? (isDirective ? name.toLowerCase() : name);
+  const blockKind = isDirective ? directiveStatementKind(normalizedName) : undefined;
   const kind: DocumentStatementKind = instruction !== undefined
     ? "instruction"
-    : (name.startsWith(".") ? "directive" : "macroInvocation");
-  const normalizedName = instruction?.mnemonic
-    ?? (kind === "directive" ? name.toLowerCase() : name);
+    : (blockKind ?? (isDirective ? "directive" : "macroInvocation"));
   return Object.freeze({
     kind,
     name,

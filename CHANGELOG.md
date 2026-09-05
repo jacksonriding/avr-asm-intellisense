@@ -1,56 +1,76 @@
 # Changelog
 
+All notable changes for AVR Assembly IntelliSense.
+
 ## Unreleased
 
-- Add the versioned roadmap for comprehensive GNU AVR tooling coverage.
-- Centralize shell-free AVR GCC and PlatformIO execution behind a bounded process runner.
-- Propagate completion cancellation and extension shutdown into active tool processes.
-- Preserve shared PlatformIO metadata discovery while allowing individual waiters to cancel safely.
-- Add cross-platform CI for type checks, coverage, audit, packaging, and supported VS Code versions.
-- Add real Extension Host smoke coverage for activation, language associations, completions,
-  hover, signature help, commands, and an installed production VSIX.
-- Add deterministic Restricted Mode Extension Host coverage for static language features.
-- Extract project-context discovery into an editor-neutral service with bounded caches,
-  shared cancellation, and stale-result rejection.
-- Add immutable, source-preserving document snapshots with tolerant local definition
-  analysis for labels, GNU symbol directives, assignments, comments, and incomplete input.
-- Add toolchain-independent local-symbol completion, document symbols, hover, and
-  same-file go-to-definition, including directional numeric labels.
-- Add immutable, source-preserving statement and operand analysis for instructions,
-  directives, and macro-shaped invocations, including continuations and AVR `$` separators.
-- Add immutable structural GNU AVR expression trees with assembler-specific precedence,
-  relocatable-address modifiers, absolute source ranges, and bounded malformed-input recovery.
-- Add a deterministic 30,000-line parser latency fixture and parser-specific 90% coverage gates.
+### Added
+- Add a versioned roadmap and public delivery criteria in `docs/ROADMAP.md`.
+- Add bounded shell-free execution via a shared process runner for `avr-gcc` and PlatformIO.
+- Add workspace-context extraction to an editor-neutral layer with deterministic caching.
+- Add immutable, source-preserving parsing and local definition modeling for GNU AVR assembly:
+  labels, GNU symbol directives, assignments, comments, and incomplete input.
+- Add local symbol completion, document symbols, hover, and same-file go-to-definition.
+- Add instruction/directive/macro statement modeling with continuations and same-line separators.
+- Add structural, immutable GNU AVR expression trees with assembler semantics and bounded malformed-input recovery.
+- Add deterministic large-file parser-latency fixture and parser-critical coverage gates.
+- Add Extension Host coverage for activation, language features, static-only workspace modes, and packaged activation.
+- Strengthen trust-bound behaviors for Restricted Mode and untrusted workspace execution paths.
 
-## 0.3.0
+### Changed
+- Standardize process and discovery behavior so cancellation and workspace shutdown propagate safely.
+- Centralize compiler/platform metadata extraction and stale-result handling across discovery paths.
+- Harden command/input handling in preparation for stricter release gates.
 
-- Add an immutable catalogue of all 119 unique AVR instruction mnemonics.
-- Add hover documentation for instruction forms, operands, timing, SREG effects, aliases,
-  availability, and the official Microchip manual.
-- Add overload-aware signature help and active-operand tracking.
-- Derive instruction completions from the catalogue and expand TextMate highlighting to match it.
-- Keep instruction help available without a toolchain and in untrusted workspaces.
+### Security
+- Ensure command execution never uses shell interpolation.
+- Restrict executable command surfaces through validated process invocation.
+- Keep static analysis functional when compiler/tooling is missing.
 
-## 0.2.0
+## 0.3.0 — 2026-08-29
 
-- Introduce an editor-neutral, immutable AVR compilation context.
-- Resolve settings per source file from `compile_commands.json`.
-- Support safe `arguments` and quoted `command` compilation database entries.
-- Add manual, compilation database, PlatformIO metadata, and INI precedence rules.
-- Add the `AVR Assembly: Show Active Context` command.
-- Stop accepting unrestricted compiler flags and forward only validated preprocessor inputs.
+### Added
+- Immutable catalogue of 119 AVR instruction mnemonics.
+- Instruction hover docs with operands, timing notes, SREG effects, aliases, and availability.
+- Overload-aware signature help with active-operand resolution.
+- Static completions and TextMate-driven highlighting.
+- Platform and compile context foundations:
+  - `compile_commands.json` ingestion
+  - Safe handling of `arguments` and `command` forms
+  - Manual, PlatformIO, and default compiler-path settings
+  - `AVR Assembly: Show Active Context` command
+- Workspace-context discovery pipeline with trust-aware handling.
 
-## 0.1.0
+### Changed
+- Add `usePlatformioMetadata` and stronger boundaries on settings-driven metadata flow.
+- Tighten extraction and forwarding of compiler inputs for preprocessing and symbol discovery.
 
-- Discover generic AVR compilation context through PlatformIO project metadata.
-- Support current array-based and legacy string-based PlatformIO compiler flags.
-- Forward validated MCU, macro definitions, and include paths to AVR preprocessing.
-- Add automatic PlatformIO executable discovery and bounded metadata caching.
-- Add modern AVR compatibility tests without board-specific production logic.
+### Security
+- Reject unsafe build flags outside supported preprocessing inputs.
 
-## 0.0.1
+## 0.2.0 — 2026-08-20
 
-- Initial development scaffold.
-- Add AVR syntax highlighting and static completions.
-- Add configurable `<avr/io.h>` macro extraction through `avr-gcc`.
-- Add basic `platformio.ini` MCU discovery from `board_build.mcu`.
+### Added
+- Add editor-neutral compilation context extraction.
+- Resolve AVR settings from `compile_commands.json`.
+- Add manual + PlatformIO + INI-based MCU and include discovery.
+- Add `AVR Assembly: Show Active Context` command.
+
+### Changed
+- Keep instruction docs and completion behavior available without toolchain execution.
+
+## 0.1.0 — 2026-08-15
+
+### Added
+- Add editor-neutral AVR context extraction.
+- Add PlatformIO metadata discovery and automatic compiler/execution path resolution.
+- Add automatic PlatformIO executable discovery.
+
+### Changed
+- Modernize compatibility paths for PlatformIO compilers and metadata.
+
+## 0.0.1 — Initial development
+
+### Added
+- Initial syntax highlighting, static completion, and assembler language entry points.
+- Configurable `<avr/io.h>` macro extraction via `avr-gcc`.

@@ -83,6 +83,31 @@ describe("document snapshots", () => {
     ]);
   });
 
+  it("classifies block directives as dedicated statement kinds", () => {
+    const source = [
+      ".macro FOO, A",
+      ".byte 1, 2",
+      ".ENDR",
+      ".rept 4",
+      ".else",
+      ".endif"
+    ].join("\n");
+
+    const snapshot = createDocumentSnapshot(source, 0);
+
+    expect(snapshot.statements.map((statement) => ({
+      kind: statement.kind,
+      name: statement.name
+    }))).toEqual([
+      { kind: "directiveBlockStart", name: ".macro" },
+      { kind: "directive", name: ".byte" },
+      { kind: "directiveBlockEnd", name: ".ENDR" },
+      { kind: "directiveBlockStart", name: ".rept" },
+      { kind: "directiveBlockElse", name: ".else" },
+      { kind: "directiveBlockEnd", name: ".endif" }
+    ]);
+  });
+
   it("splits only top-level operands across balanced syntax, quotes, escapes, and comments", () => {
     const source = [
       "macro (r16, r17), [Z, 4], {1, 2}, \"a,\\\"b\", 'c,', first/*,*/,last",

@@ -1,30 +1,31 @@
 # AVR Assembly IntelliSense
 
-Project-aware language support for GNU AVR assembly (`.S`, `.s`, and `.asm`) in VS Code.
-It is build-system neutral: PlatformIO is supported, but it is only one source of AVR
-compilation settings.
+Project-aware language support for GNU AVR assembly in Visual Studio Code.
+The extension is build-system agnostic: it can consume PlatformIO metadata, `compile_commands.json`, or manual settings.
 
-The extension provides:
+## Highlights
 
-- Completions for all 119 unique mnemonics in Microchip's AVR instruction manual
-- Hover documentation with forms, operands, cycle counts, SREG effects, aliases, and availability
-- Signature help that follows the active operand and distinguishes pointer-form overloads
-- Local completion, outline symbols, hover, and go-to-definition for labels and GNU constants
-- AVR instruction, register, and GNU assembler directive syntax highlighting
-- MCU-specific macro completions extracted from `<avr/io.h>` by `avr-gcc -E -dM`
-- Per-file compiler, MCU, define, undefine, and include discovery from `compile_commands.json`
-- Generic PlatformIO metadata discovery for the compiler, MCU, defines, and include paths
-- Lightweight `platformio.ini` MCU discovery from `board_build.mcu` as a fallback
-- Safe compiler invocation without a shell
-- Graceful fallback to static completions when a toolchain is unavailable
-- An `AVR Assembly: Show Active Context` command for inspecting what was discovered
+- Completions for all 119 AVR instruction mnemonics from the official AVR ISA
+- Instruction hover with operands, timing notes, status effects, aliases, and caveats
+- Operand-aware signature help with active-parameter tracking
+- Local completion, outline symbols, symbol hover, and same-file go-to-definition
+- Syntax highlighting for AVR instructions, registers, and assembler directives
+- Targeted macro extraction from `<avr/io.h>` via `avr-gcc -E -dM`
+- Compilation-context discovery from `compile_commands.json`, PlatformIO metadata, and workspace settings
+- Safe process execution model (bounded and non-shell-based) with graceful fallback to static analysis
+- Workspace command: **AVR Assembly: Show Active Context**
 
-## Try the instruction help
+## Quick start
 
-Open an AVR assembly file and make sure the language indicator says **AVR Assembly**. Hover
-over an instruction such as `LDI`, `LPM`, or `XCH` to see its documentation. Type a space or
-comma after a mnemonic to open operand guidance; use **Trigger Parameter Hints** from the
-Command Palette if parameter hints are disabled globally.
+1. Install dependencies:
+
+```sh
+npm install
+```
+
+2. Open an AVR file (`.S`, `.s`, or `.asm`) and confirm language mode is **AVR Assembly**.
+3. Trigger completion or hover on an instruction such as `LDI`, `LPM`, or `XCH`.
+4. Use comma/space after mnemonics for signature help.
 
 ```asm
 start:
@@ -33,57 +34,42 @@ start:
     out PORTB, r16
 ```
 
-The catalogue represents the complete instruction-family union from Microchip's AVR
-Instruction Set Manual, including aliases and device-specific instructions. Availability
-and timing can vary between AVRe, AVRxm, AVRxt, AVRrc, and individual devices, so the hover
-includes explicit caveats and links to the official manual. Target-specific filtering is a
-future enhancement; the extension does not currently hide unsupported instructions for the
-selected MCU.
+## Feature support and behavior
 
-## Development
+The instruction catalog includes aliases and device-dependent variants from Microchip’s AVR documentation. Device filtering is not exact today; some unsupported mnemonics may still appear for a selected MCU. Each hover includes clear availability caveats where applicable.
 
-The Extension Host harness requires Node.js 22 or newer. CI uses Node.js 24.
+Static language features work without a compiler:
 
-```sh
-npm install
-npm test
-npm run check
-npm run compile
-npm run test:extension
-npm run test:extension:restricted
-npm run test:extension:packaged
-```
+- Instruction completions and docs
+- Register and directive completion
+- Symbol discovery in simple source files
+- Hover, signature help, and outline basics
 
-`test:extension` exercises the source checkout in a real Extension Host. The packaged
-variant builds, installs, and activates the generated VSIX in an isolated test profile.
-The Restricted Mode variant uses a fresh untrusted workspace and verifies that static
-language features remain available without granting project tool execution. On headless
-Linux, install the Xvfb package and prefix Extension Host commands with `xvfb-run -a`.
-Press `F5` in VS Code to start an interactive Extension Development Host.
+Tool-assisted features may require trusted workspace context and a local toolchain:
 
-## How project settings are resolved
+- `<avr/io.h>` macro extraction
+- Compile context from `compile_commands.json` and PlatformIO
+- Preprocessor-derived symbols
 
-Each AVR source file receives an immutable compilation context. Sources are considered in
-this order:
+## Project settings
 
-1. Explicit `avrAsmIntellisense.compilerPath` and `avrAsmIntellisense.mcu` settings
-2. An exact source-file entry in `compile_commands.json`
-3. The selected PlatformIO environment's metadata
-4. `board_build.mcu` in `platformio.ini`
-5. `avr-gcc` on `PATH`, once an MCU is otherwise known
+Resolution order for per-file context is deterministic:
 
-Data from different MCUs is not mixed. For example, changing the explicit MCU discards
-defines and includes discovered for a different target.
+1. `avrAsmIntellisense.compilerPath` + `avrAsmIntellisense.mcu`
+2. Exact file entry in `compile_commands.json`
+3. Selected PlatformIO environment metadata
+4. `platformio.ini` `board_build.mcu`
+5. `avr-gcc` from `PATH` when MCU is known
 
-Run **AVR Assembly: Show Active Context** from the Command Palette to see the source,
-dialect, MCU, compiler, environment or working directory, and symbol-input counts used for
-the active file.
+Data from different MCU contexts is never merged.
 
-## Compilation database projects
+Run **AVR Assembly: Show Active Context** from the command palette to inspect the active file context.
 
-The extension searches for `compile_commands.json` in the workspace root and `build/`.
-CMake can create this file with `CMAKE_EXPORT_COMPILE_COMMANDS`; Make-based projects can
-generate one with tools such as Bear. A different file can be selected explicitly:
+## Workspace integration
+
+### Compilation database (`compile_commands.json`)
+
+The extension searches `compile_commands.json` in workspace root and `build/`.
 
 ```json
 {
@@ -91,59 +77,70 @@ generate one with tools such as Bear. A different file can be selected explicitl
 }
 ```
 
-Both the standard `arguments` representation and quoted `command` strings are supported.
-The command is parsed as data and is never executed. Only the AVR compiler, `-mmcu`, `-D`,
-`-U`, `-I`, and `-isystem` values are extracted; arbitrary build flags are not forwarded to
-the preprocessing process.
+Both `arguments` and command-string formats are supported. Commands are parsed as data only; they are never executed. Only AVR compiler flags relevant to preprocessing are read.
 
-## PlatformIO projects
+### PlatformIO
 
-In a trusted local workspace, the extension runs `pio project metadata --json-output`
-and uses PlatformIO's selected AVR compiler, MCU flags, preprocessor definitions, and
-include paths. This supports custom boards and platforms without hard-coded board names.
-
-For projects with multiple environments, select one explicitly when necessary:
+Trusted workspaces may use `pio project metadata --json-output` to discover compiler, MCU, macros, and include paths.
 
 ```json
 {
-  "avrAsmIntellisense.platformioEnvironment": "uno"
-}
-```
-
-The PlatformIO executable is discovered from the PlatformIO IDE custom path, its standard
-installation under `.platformio/penv`, or `PATH`. It can also be configured explicitly:
-
-```json
-{
+  "avrAsmIntellisense.platformioEnvironment": "uno",
   "avrAsmIntellisense.platformioPath": "/absolute/path/to/platformio"
 }
 ```
 
-## Manual projects
+### Manual mode
 
-The extension remains usable without PlatformIO. Set the MCU and compiler manually:
+For non-PlatformIO projects:
 
 ```json
 {
-  "avrAsmIntellisense.mcu": "atmega328p",
-  "avrAsmIntellisense.compilerPath": "/absolute/path/to/avr-gcc"
+  "avrAsmIntellisense.compilerPath": "/usr/local/bin/avr-gcc",
+  "avrAsmIntellisense.mcu": "atmega328p"
 }
 ```
 
-Static instruction, register, and directive completions do not require any toolchain.
+## Development workflow
 
-PlatformIO metadata can execute project build scripts, so project discovery and compiler
-processes run only for trusted local workspaces. Compilation database commands are parsed
-but never executed. Uppercase `.S` remains recommended because the real AVR build must also
-preprocess `<avr/io.h>`.
+Prerequisite:
 
-## Roadmap
+- Node.js 22+ (CI uses Node.js 24)
 
-The project is working toward comprehensive GNU AVR language, device, editor, project,
-validation, and reliability coverage. See the [versioned roadmap](docs/ROADMAP.md) for
-milestones, measurable release gates, the immediate implementation slice, and explicit
-non-goals.
+```sh
+npm install
+npm run check
+npm run test
+npm run compile
+npm run test:extension
+npm run test:extension:restricted
+npm run test:extension:packaged
+```
+
+`test:extension` runs the source checkout in Extension Host.
+`test:extension:packaged` builds and installs a packaged VSIX in an isolated profile.
+`test:extension:restricted` validates static analysis in an untrusted workspace.
+
+On Linux CI/headless environments, use:
+
+```sh
+xvfb-run -a npm run test:extension
+```
+
+Press `F5` in VS Code for interactive development host testing.
+
+## Documentation
+
+- [Roadmap](docs/ROADMAP.md)
+- [Changelog](CHANGELOG.md)
+- [Architecture](docs/ARCHITECTURE.md)
+
+## Community and governance
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)
 
 ## Status
 
-This repository is under active development and is not yet published to the VS Code Marketplace.
+This extension is actively developed and not currently published to the VS Code Marketplace.

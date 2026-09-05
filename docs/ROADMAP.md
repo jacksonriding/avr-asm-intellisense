@@ -1,197 +1,124 @@
 # Roadmap
 
-## Direction
+**Project:** AVR Assembly IntelliSense  
+**Status:** Production-hardening stage, pre-1.0  
+**Last updated:** 2026-09-05
 
-AVR Assembly IntelliSense aims to make GNU AVR assembly as well understood by the
-editor as a mainstream language, from source navigation through device-correct
-diagnostics and toolchain verification. Static language features must remain useful
-without an installed compiler and in untrusted workspaces.
+## Purpose
 
-This roadmap is ordered by dependency, not by date. A milestone ships only when its
-release gates are met; incomplete work moves forward rather than weakening a gate.
+AVR Assembly IntelliSense aims to provide GNU AVR editor support with the reliability and
+clarity expected in commercial language tooling: strong language analysis, predictable
+performance, robust offline behavior, and explicit trust boundaries.
 
-## Coverage scorecard
+## Scope
 
-Progress is measured across independent coverage dimensions. Supporting a mnemonic
-does not imply support for every device, operand constraint, or editor feature.
+The product roadmap covers:
 
-| Dimension | Coverage target |
+- GNU AVR parsing depth (labels, directives, expressions, conditionals, includes, macros)
+- Instruction semantics and device intelligence
+- Editor features (navigation, refactoring, diagnostics, productivity tools)
+- Project model support (compile databases, PlatformIO, manual overrides)
+- Validation and release quality (coverage, tests, CI, package quality)
+
+The roadmap does **not** target non-AVR architectures or replace assembler, linker,
+debugger, or simulator workflows.
+
+## Progress scorecard
+
+| Area | Coverage objective |
 | --- | --- |
-| GNU AVR language | Labels, expressions, directives, macros, includes, conditionals, sections, and incomplete source |
-| Instructions | Every documented form, operand constraint, alias, status effect, timing model, and target capability |
-| Devices | AVR families, registers, SFRs, bitfields, vectors, memory regions, and instruction capabilities |
-| Editor features | Completion, hover, signatures, symbols, navigation, references, rename, tokens, and diagnostics |
-| Project models | Manual settings, compilation databases, PlatformIO, preprocessing, and multi-root workspaces |
-| Validation | Unit, integration, Extension Host, corpus, fuzz, and real-toolchain differential tests |
-| Reliability | Cancellation, timeouts, workspace trust, bounded analysis, stale-result rejection, and cross-platform behavior |
+| GNU AVR language | Labels, expressions, directives, macros, includes, conditionals, sections, incomplete input |
+| Instructions | Form coverage, aliases, operand constraints, status effects, timing confidence, target availability |
+| Devices | Register/SFR maps, bitfield-aware tool support, vectors, memory regions |
+| Editor features | Completion, hover, signature help, symbols, navigation, references, rename, diagnostics |
+| Project context | Compile-command parsing, PlatformIO, manual settings, multi-root and trust-safe behavior |
+| Validation | Unit, integration, Extension Host, package smoke, real-toolchain checks where possible |
+| Reliability | Cancellation, bounded work, timeouts, stale-result rejection, security-conscious execution |
 
-The repository should publish a supported syntax and device matrix before 1.0 so
-coverage claims remain specific and testable.
+## Milestone map
 
-## Milestones
+Each milestone moves only when its exit criteria are met.
 
-### 0.3.1 — Reliability foundation
+### 0.3.1 — Reliability Foundation ✅
 
-Progress: the bounded process runner, cross-platform CI definition, source Extension
-Host smoke suite, installed-VSIX smoke suite, and Restricted Mode Extension Host coverage
-are implemented. Project-context discovery and caching are now editor-neutral and reject
-stale results. A 30,000-line parser latency fixture is implemented; the workspace-index
-latency fixture remains before this milestone closes.
+- Bounded process runner for compiler and PlatformIO calls
+- CI coverage for type-check, test, audit, and packaging gates
+- Source-neutral project context service with bounded caching and stale-result rejection
+- Extension Host smoke coverage for activation and baseline features
+- Installed VSIX smoke testing and Restricted Mode coverage
+- Deterministic parser and index latency fixtures
 
-- Add CI for type checking, tests and coverage, audit, packaging, and VSIX smoke
-  installation.
-- Add a real VS Code Extension Host smoke suite.
-- Route AVR GCC and PlatformIO execution through one bounded, cancellation-aware
-  process runner; terminate children on cancellation and extension shutdown.
-- Separate project-context discovery and caching from the VS Code adapter.
-- Establish parser and workspace-index latency fixtures.
+### 0.4.0 — Full-document language model ✅
 
-Exit: cancellation races are tested, a packaged extension installs and activates,
-overall line coverage remains at least 80%, and new process/security-critical code
-has at least 90% line coverage.
+- Immutable, source-preserving parsing architecture for instructions, directives, labels, macros, and local symbols
+- Tolerant document snapshots with numeric/local/named label handling and malformed-line recovery
+- Local completion, document symbols, hover, and same-file definition navigation
+- Structural GNU expression tree integration into definition operands
+- Cursor-safe statement and operand range modeling
 
-### 0.4.0 — Full-document language model
+### 0.4.1 — Includes and workspace index 🚧
 
-Progress: the first editor-neutral document snapshot is immutable and source-preserving,
-with tolerant local definition analysis for named/local/numeric labels, `.equ`, `.equiv`,
-`.set`, assignments, comments, malformed input, and duplicates. Local completion, document
-symbols, symbol hover, and same-file definition navigation are implemented, including
-directional numeric-label references. The snapshot now models instruction, directive,
-and macro-shaped invocation statements with source-preserving operand slots, logical
-continuations, and same-line separators. Definition RHSs and non-missing operands now carry
-immutable structural GNU AVR expression trees with tolerant incomplete-input recovery.
-Expression evaluation and block-construct modeling remain.
+- GNU `#include` and `.include` support via bounded include graph traversal
+- Safe cross-file analysis with cycle detection and invalidation
+- Cross-file symbol features and workspace indexing
+- Conditional regions modeled as active / inactive / unknown
 
-- Build a tolerant, source-preserving GNU AVR lexer, parser, expression model, and
-  immutable document snapshot.
-- Recognize named, local, and repeatable numeric labels (`1f`/`1b`), instructions,
-  macro invocations, assignments, sections, visibility, and GNU AVR expressions.
-- Model `.equ`, `.equiv`, `.set`, `.macro`, `.rept`, `.irp`, `.irpc`, comments,
-  strings, CPP lines, continuations, and incomplete or malformed editor input.
-- Deliver local-symbol completion, document symbols, symbol hover, and
-  go-to-definition as the first user-facing slice.
+### 0.5.0 — Semantic editing and diagnostics 🚧
 
-Exit: arbitrary input cannot crash or hang the parser, fuzz/property fixtures pass,
-parser critical paths have at least 90% line coverage, and the agreed large-file
-latency budget is met.
+- Context-aware completions for registers/constants/directives
+- Conservative diagnostics for syntax and operand constraints
+- Practical quick-fix support where correction confidence is high
 
-### 0.4.1 — Includes and workspace index
+### 0.6.0 — Device intelligence 🚧
 
-- Resolve GNU `.include` and CPP `#include` using compilation-context path order.
-- Add bounded traversal, cycle detection, unsaved-document overlays, reverse
-  dependency invalidation, and multi-root/MCU isolation.
-- Add cross-file definitions, references, workspace symbols, and safe rename.
-- Represent conditional regions as active, inactive, or unknown.
+- Typed device capability model with provenance and coverage confidence
+- Reproducible profile generation and target-specific filtering
+- Published capability matrix for representative AVRs
 
-Exit: include graphs remain deterministic under cycles and edits, results from stale
-document versions are rejected, and cross-file features pass integration tests.
+### 0.7.0 — Toolchain-truth diagnostics 🚧
 
-### 0.5.0 — Semantic editing and diagnostics
+- Trusted-workspace diagnostics pipeline using isolated preprocessor/artifact runs
+- Source-correlated GCC/assembler warning mapping
+- Cancellation-aware execution, stale-result filtering, and command provenance
 
-- Add context-aware target, register, register-pair, constant, macro, include-path,
-  and directive completion.
-- Add semantic tokens and conservative diagnostics for unknown syntax, operand
-  counts/forms, register constraints, immediate/bit/I/O ranges, and symbol errors.
-- Add quick fixes only where the correction is unambiguous.
+### 0.8.0 — Advanced productivity 🚧
 
-Exit: diagnostics have positive and negative corpus tests, unsupported constructs do
-not produce speculative errors, and critical editor flows pass Extension Host tests.
+- Formatter, folding, inlay hints, and deeper navigation helpers
+- Stable and bounded artifact-aware workflows
 
-### 0.6.0 — Device intelligence
+### 0.9.0 — LSP and ecosystem beta 🚧
 
-- Replace prose-only availability with typed architecture and instruction
-  capabilities, register restrictions, memory ranges, SFRs, bitfields, vectors,
-  aliases, and cycle models.
-- Generate reproducible profiles from supported toolchains or installed Microchip
-  device packs, recording provenance and respecting redistribution licences.
-- Test representative classic ATmega/ATtiny, reduced-core, XMEGA, modern
-  tiny/mega, and AVR Dx/EA-class targets across supported project models.
+- Editor-service extraction behind VS Code adapter
+- LSP transport with conformance parity
+- Public corpus and coverage publishing process
 
-Exit: the published device matrix is generated and validated, target contexts never
-mix, and device diagnostics agree with supported reference toolchains.
+### 1.0 — Stable GNU AVR tooling 🎯
 
-### 0.7.0 — Toolchain-truth diagnostics
-
-- Add optional, debounced assembly checks for trusted workspaces using isolated
-  temporary output and cancellation-aware processes.
-- Parse GCC/binutils diagnostics and preserve source mapping through preprocessor
-  line markers while rejecting stale results.
-- Add commands to check the active file, show preprocessed source, and show the
-  effective assembler invocation.
-
-Exit: toolchain absence and untrusted workspaces degrade safely to static analysis;
-timeouts, cancellation, source maps, and diagnostic parsing have integration tests.
-
-### 0.8.0 — Advanced productivity
-
-- Add an idempotent formatter, folding and selection ranges, inlay hints, resolvable
-  call hierarchy, reference CodeLens, and device-aware snippets.
-- Add optional navigation over ELF, map, listing, and disassembly artifacts.
-
-Exit: formatting is stable across repeated runs and advanced features remain bounded
-and explicitly mark uncertain results.
-
-### 0.9.0 — LSP and ecosystem beta
-
-- Extract an editor-neutral language service and add an LSP transport.
-- Run the same conformance suite against the core, LSP, and VS Code adapter.
-- Build a licence-compatible public AVR corpus and report unsupported constructs,
-  latency, memory, crashes, and diagnostic precision.
-- Design explicit AVRASM2 and AVRA dialect profiles without silently mixing syntax.
-
-Exit: transport conformance passes and corpus runs have no crashes, hangs, or
-unbounded resource growth.
-
-### 1.0 — Stable GNU AVR tooling
-
-- Verify Linux, Windows, and macOS behavior across unit, integration, Extension Host,
-  real-toolchain, package-install, and security checks.
-- Publish supported language/device matrices, provenance, workspace-trust behavior,
-  troubleshooting, and release automation.
-- Replace placeholder Marketplace metadata and complete the stable release path.
-
-Exit: all CI gates pass, overall line coverage is at least 85%, parser/index/security
-critical modules remain at least 90%, the supported corpus has no crashes or hangs,
-and no known critical or high-severity security issue remains.
-
-## Immediate vertical slice
-
-Work begins with the smallest end-to-end foundation for later milestones:
-
-1. Add cancellation-aware process infrastructure and the 0.3.1 CI gates.
-2. Write failing fixtures for named and numeric labels, `.equ`, `.set`, comments,
-   malformed lines, and incomplete input.
-3. Implement immutable document snapshots and local symbol analysis.
-4. Add local-symbol completion, document symbols, hover, and go-to-definition.
-5. Prove those features in an Extension Host without requiring a toolchain.
-6. Run coverage, fuzz, packaging, security, and code-quality review gates.
+- Cross-platform release and reliability hardening
+- Device matrix and support policy published
+- Full marketplace-style supportability and release automation
 
 ## Release gates
 
-Every milestone must:
+- 80%+ line coverage in active development (85%+ at 1.0)
+- 90%+ coverage for parser/process/trust and security-relevant paths
+- Type checks, unit/integration tests, audit, packaging, and host validation executed per release
+- No shell execution for command execution (bounded process model only)
+- Workspace trust respected in every externally executed tool path
+- Immutable, versioned snapshots and cancellation-safe async behavior
 
-- Follow test-driven development and keep overall line coverage at or above 80%
-  until the 1.0 threshold rises to 85%.
-- Keep new parser, index, process, trust, and other security-critical paths at or
-  above 90% line coverage.
-- Pass type checking, unit/integration tests, audit, packaging, and relevant
-  Extension Host or real-toolchain suites.
-- Validate external inputs, avoid shell execution, preserve workspace-trust
-  boundaries, and never mix analysis from different MCU contexts.
-- Use immutable, versioned analysis snapshots; reject stale asynchronous results and
-  bound filesystem traversal, macro expansion, process duration, memory, and output.
-- Document user-visible behavior and update the support matrix when coverage changes.
+## Immediate next slice
+
+1. Complete include graph traversal with stale-safe invalidation
+2. Expand local-symbol and symbol-search features across documents
+3. Introduce conservative diagnostics for high-confidence grammar/operand errors
+4. Prove new functionality with host validation and focused release gates
+5. Update support matrix and publish reliability evidence with the release
 
 ## Non-goals
 
-- General x86, Arm, RISC-V, or non-AVR language support. Those require separate
-  language products rather than conditionals in the AVR parser.
-- Silently combining GNU AVR, AVRASM2, and AVRA syntax. Additional dialects require
-  explicit profiles and conformance fixtures.
-- Replacing the assembler, compiler, linker, debugger, simulator, or build system.
-- Claiming exact control flow, address layout, or cycle counts when macros, indirect
-  branches, linker placement, or device data make the answer uncertain.
-- Requiring PlatformIO, a compiler, network access, or a trusted workspace for core
-  editing features.
-- Executing commands found in compilation databases or forwarding arbitrary build
-  flags into toolchain processes.
+- General non-AVR architecture support
+- Implicit mixing of GNU AVR, AVRASM2, and AVRA behavior
+- Executing build flags or arbitrary commands from external sources
+- Deterministic claims about control-flow and cycle accuracy under indirect branch/linker effects
+
