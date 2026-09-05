@@ -39,7 +39,7 @@ export interface LocalDefinitionTarget {
   readonly definition: LocalDefinition;
 }
 
-interface SourceToken {
+export interface LocalSymbolToken {
   readonly text: string;
   readonly name: string;
   readonly start: number;
@@ -175,7 +175,11 @@ function codeMask(source: string): string {
   return result.join("");
 }
 
-function tokenAtOffset(source: string, offset: number, existingMask?: string): SourceToken | undefined {
+function tokenAtOffset(
+  source: string,
+  offset: number,
+  existingMask?: string
+): LocalSymbolToken | undefined {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > source.length) {
     return undefined;
   }
@@ -225,7 +229,7 @@ function tokenAtOffset(source: string, offset: number, existingMask?: string): S
 
 function exactOccurrenceDefinition(
   definitions: readonly LocalDefinition[],
-  token: SourceToken
+  token: LocalSymbolToken
 ): LocalDefinition | undefined {
   return definitions.find(({ nameRange }) => (
     nameRange.start === token.start && nameRange.end === token.end
@@ -234,7 +238,7 @@ function exactOccurrenceDefinition(
 
 function isStatementOperator(
   snapshot: DocumentSnapshot,
-  token: SourceToken
+  token: LocalSymbolToken
 ): boolean {
   if (exactOccurrenceDefinition(snapshot.definitions, token) !== undefined) {
     return false;
@@ -246,7 +250,7 @@ function isStatementOperator(
 
 function directionalDefinition(
   definitions: readonly LocalDefinition[],
-  token: SourceToken
+  token: LocalSymbolToken
 ): LocalDefinition | undefined {
   const candidates = definitions.filter(({ name, kind }) => (
     kind === "numericLabel" && name === token.name
@@ -262,7 +266,7 @@ function directionalDefinition(
 
 function namedHoverDefinition(
   definitions: readonly LocalDefinition[],
-  token: SourceToken
+  token: LocalSymbolToken
 ): LocalDefinition | undefined {
   const candidates = definitions.filter(({ name, kind }) => (
     kind !== "numericLabel" && name === token.name
@@ -406,7 +410,7 @@ export function localSymbolHover(
   });
 }
 
-function frozenTarget(token: SourceToken, definition: LocalDefinition): LocalDefinitionTarget {
+function frozenTarget(token: LocalSymbolToken, definition: LocalDefinition): LocalDefinitionTarget {
   return Object.freeze({
     name: definition.name,
     kind: definition.kind,
@@ -415,6 +419,13 @@ function frozenTarget(token: SourceToken, definition: LocalDefinition): LocalDef
     targetSelectionRange: frozenRange(definition.nameRange.start, definition.nameRange.end),
     definition
   });
+}
+
+export function localSymbolTokenAtOffset(
+  snapshot: DocumentSnapshot,
+  offset: number
+): LocalSymbolToken | undefined {
+  return tokenAtOffset(snapshot.source, offset);
 }
 
 export function localDefinitionTargets(

@@ -118,6 +118,7 @@ vi.mock("vscode", () => {
       })
     },
     languages: {
+      registerWorkspaceSymbolProvider: () => disposable(),
       registerCompletionItemProvider: (_language: string, provider: typeof mocks.registeredProvider) => {
         mocks.registeredProvider = provider;
         return disposable();

@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  workspaceTextDocuments: [] as Array<{
+    readonly languageId: string;
+    readonly uri: { readonly path: string; toString(): string };
+    readonly version: number;
+    readonly getText: () => string;
+    readonly offsetAt: (position: { line: number; character: number }) => number;
+    readonly positionAt: (offset: number) => { line: number; character: number };
+  }>,
   completionProvider: undefined as undefined | {
     provideCompletionItems(document: unknown, position: unknown): unknown;
   },
   documentSymbolProvider: undefined as undefined | { provideDocumentSymbols(document: unknown): unknown },
   hoverProvider: undefined as undefined | { provideHover(document: unknown, position: unknown): unknown },
-  definitionProvider: undefined as undefined | { provideDefinition(document: unknown, position: unknown): unknown }
+  definitionProvider: undefined as undefined | { provideDefinition(document: unknown, position: unknown): unknown },
+  workspaceSymbolProvider: undefined as undefined | { provideWorkspaceSymbols(query: string): unknown[] }
 }));
 
 vi.mock("vscode", () => {
@@ -74,6 +83,12 @@ vi.mock("vscode", () => {
     Position,
     Range,
     SymbolKind: { Function: 10, Number: 11, Constant: 12, Variable: 13 },
+    Uri: {
+      file: (value: string) => ({
+        path: value,
+        toString: () => value
+      })
+    },
     languages: {
       registerCompletionItemProvider: (_language: string, provider: typeof mocks.completionProvider) => {
         mocks.completionProvider = provider;
@@ -93,20 +108,36 @@ vi.mock("vscode", () => {
       registerDefinitionProvider: (_language: string, provider: typeof mocks.definitionProvider) => {
         mocks.definitionProvider = provider;
         return disposable();
+      },
+      registerWorkspaceSymbolProvider: (
+        provider: typeof mocks.workspaceSymbolProvider
+      ) => {
+        mocks.workspaceSymbolProvider = provider;
+        return disposable();
       }
-    }
+    },
+    workspace: { textDocuments: mocks.workspaceTextDocuments }
   };
 });
 
 import { registerLocalSymbolProviders } from "../src/vscode/localSymbolProviders";
 
-function document(source: string, version = 1) {
+function document(
+  source: string,
+  uri = "file:///workspace/src/main.S",
+  version = 1,
+  languageId = "avr-asm"
+) {
   const lines = source.split("\n");
   const lineStarts = lines.map((_line, index) => (
     index === 0 ? 0 : lines.slice(0, index).reduce((sum, line) => sum + line.length + 1, 0)
   ));
   return {
-    uri: { toString: () => "file:///workspace/src/main.S" },
+    languageId,
+    uri: {
+      path: uri,
+      toString: () => uri
+    },
     version,
     getText: () => source,
     offsetAt: (position: { line: number; character: number }) =>
@@ -128,16 +159,19 @@ describe("local symbol providers", () => {
     mocks.documentSymbolProvider = undefined;
     mocks.hoverProvider = undefined;
     mocks.definitionProvider = undefined;
+    mocks.workspaceSymbolProvider = undefined;
+    mocks.workspaceTextDocuments.splice(0, mocks.workspaceTextDocuments.length);
   });
 
-  it("registers completion, document-symbol, hover, and definition providers", () => {
+  it("registers completion, document-symbol, hover, definition, and workspace-symbol providers", () => {
     const registrations = registerLocalSymbolProviders();
 
-    expect(registrations).toHaveLength(4);
+    expect(registrations).toHaveLength(5);
     expect(mocks.completionProvider).toBeDefined();
     expect(mocks.documentSymbolProvider).toBeDefined();
     expect(mocks.hoverProvider).toBeDefined();
     expect(mocks.definitionProvider).toBeDefined();
+    expect(mocks.workspaceSymbolProvider).toBeDefined();
   });
 
   it("adapts immutable local symbol analysis to VS Code values", () => {
@@ -191,6 +225,40 @@ describe("local symbol providers", () => {
     expect(hover.contents.textValues.join("\n")).toContain("command:test");
     expect(definitions).toHaveLength(1);
     expect(definitions[0]?.range.start).toMatchObject({ line: 0, character: 0 });
+  });
+
+  it("resolves definitions across open AVR documents when symbol not defined in the current document", () => {
+    const active = document("rjmp TARGET", "file:///workspace/src/main.S", 1);
+    const referenced = document(".equ TARGET, 42", "file:///workspace/include.S", 1);
+    mocks.workspaceTextDocuments.push(referenced);
+
+    registerLocalSymbolProviders();
+
+    const definition = mocks.definitionProvider?.provideDefinition(
+      active,
+      { line: 0, character: 5 }
+    ) as Array<{ uri: { toString: () => string }; range: { start: { line: number; character: number } } }>;
+
+    expect(definition).toHaveLength(1);
+    expect(definition[0]?.uri.toString()).toBe("file:///workspace/include.S");
+    expect(definition[0]?.range.start).toMatchObject({ line: 0, character: 5 });
+  });
+
+  it("provides workspace symbols from all open AVR documents", () => {
+    const first = document(".equ TARGET, 42", "file:///workspace/src/one.S", 1);
+    const second = document("LOCAL_START:\n.equ LOCAL_VAL, 1", "file:///workspace/src/two.S", 1);
+    mocks.workspaceTextDocuments.push(first, second);
+
+    registerLocalSymbolProviders();
+
+    const symbols = mocks.workspaceSymbolProvider?.provideWorkspaceSymbols("LOCAL_VAL") as Array<{
+      name: string;
+      containerName: string;
+    }>;
+
+    expect(symbols).toHaveLength(1);
+    expect(symbols[0]?.name).toBe("LOCAL_VAL");
+    expect(symbols[0]?.containerName).toBe("file:///workspace/src/two.S");
   });
 
   it("rebuilds analysis for a new document version", () => {
